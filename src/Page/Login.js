@@ -278,7 +278,7 @@ export default function Login() {
             message: "Login successful! Redirecting to employer dashboard...",
             severity: "success",
           })
-          setTimeout(() => navigate("/employer-dashboard"), 1200)
+          setTimeout(() => navigate("/employer-dash"), 1200)
         } else {
           setNotification({
             open: true,
@@ -331,7 +331,7 @@ export default function Login() {
             message: "Login successful! Redirecting to employer dashboard...",
             severity: "success",
           })
-          setTimeout(() => navigate("/employer-dashboard"), 1200)
+          setTimeout(() => navigate("/employer-dash"), 1200)
         } else {
           setNotification({
             open: true,

@@ -20,6 +20,7 @@ import QuizComponent from "./components/QuizComponent";
 import MCQsPage from "./Page/McqPage";
 import MockInterviewPage from "./Page/Interview"
 import EmployerSetup from "./Page/EmployerSetup";
+import EmpDash from "./Page/EmployerDashboard";
 
 function App() {
   return (
@@ -133,6 +134,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <EmployerSetup />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/employer-dash"
+            element={
+              <ProtectedRoute>
+                <EmpDash />
               </ProtectedRoute>
             }
           />
