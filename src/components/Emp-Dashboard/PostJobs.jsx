@@ -17,6 +17,7 @@ import {
   Alert,
 } from "@mui/material"
 import { Add, Delete } from "@mui/icons-material"
+import AIJobAutoFillButton from "../../Services/AiJobButton"
 
 const PostJob = () => {
   const [jobData, setJobData] = useState({
@@ -52,6 +53,16 @@ const PostJob = () => {
       ...jobData,
       skills: jobData.skills.filter((skill) => skill !== skillToRemove),
     })
+  }
+
+  // This callback is called when AI returns all data
+  const handleAIFill = (aiData) => {
+    setJobData((prev) => ({
+      ...prev,
+      description: aiData.description || "",
+      requirements: Array.isArray(aiData.requirements) ? aiData.requirements.join('\n') : "",
+      skills: Array.isArray(aiData.skills) ? aiData.skills : [],
+    }))
   }
 
   const handleSubmit = (event) => {
@@ -94,7 +105,7 @@ const PostJob = () => {
         <CardContent>
           <form onSubmit={handleSubmit}>
             <Grid container spacing={3}>
-              <Grid item xs={12} md={6}>
+              <Grid item xs={12} md={6} sx={{width: "48%"}}>
                 <TextField
                   fullWidth
                   label="Job Title"
@@ -103,7 +114,7 @@ const PostJob = () => {
                   required
                 />
               </Grid>
-              <Grid item xs={12} md={6}>
+              <Grid item xs={12} md={6} sx={{width: "48%"}}>
                 <TextField
                   fullWidth
                   label="Company Name"
@@ -112,7 +123,7 @@ const PostJob = () => {
                   required
                 />
               </Grid>
-              <Grid item xs={12} md={6}>
+              <Grid item xs={12} md={6} sx={{width: "48%"}}>
                 <TextField
                   fullWidth
                   label="Location"
@@ -121,7 +132,7 @@ const PostJob = () => {
                   required
                 />
               </Grid>
-              <Grid item xs={12} md={6}>
+              <Grid item xs={12} md={6} sx={{width: "48%"}}>
                 <FormControl fullWidth required>
                   <InputLabel>Job Type</InputLabel>
                   <Select value={jobData.jobType} onChange={handleInputChange("jobType")} label="Job Type">
@@ -133,7 +144,7 @@ const PostJob = () => {
                   </Select>
                 </FormControl>
               </Grid>
-              <Grid item xs={12} md={6}>
+              <Grid item xs={12} md={6} sx={{width: "48%"}}>
                 <FormControl fullWidth required>
                   <InputLabel>Experience Level</InputLabel>
                   <Select
@@ -148,7 +159,7 @@ const PostJob = () => {
                   </Select>
                 </FormControl>
               </Grid>
-              <Grid item xs={12} md={6}>
+              <Grid item xs={12} md={6} sx={{width: "48%"}}>
                 <TextField
                   fullWidth
                   label="Salary Range"
@@ -157,7 +168,11 @@ const PostJob = () => {
                   placeholder="e.g., $50,000 - $70,000"
                 />
               </Grid>
-              <Grid item xs={12}>
+              {/* AI Autofill Button */}
+              <Grid item xs={12} sx={{width: "100%"}}>
+                <AIJobAutoFillButton jobData={jobData} onAIFill={handleAIFill} />
+              </Grid>
+              <Grid item xs={12} sx={{width: "100%"}}>
                 <TextField
                   fullWidth
                   label="Job Description"
@@ -166,9 +181,10 @@ const PostJob = () => {
                   multiline
                   rows={4}
                   required
+                  sx={{ mt: 1 }}
                 />
               </Grid>
-              <Grid item xs={12}>
+              <Grid item xs={12} sx={{width: "100%"}}>
                 <TextField
                   fullWidth
                   label="Requirements"
@@ -177,9 +193,11 @@ const PostJob = () => {
                   multiline
                   rows={3}
                   required
+                  sx={{ mt: 1 }}
                 />
               </Grid>
-              <Grid item xs={12}>
+              {/* Required Skills section */}
+              <Grid item xs={12} sx={{width: "100%"}}>
                 <Box sx={{ mb: 2 }}>
                   <Typography variant="h6" gutterBottom>
                     Required Skills
@@ -191,6 +209,7 @@ const PostJob = () => {
                       onChange={(e) => setSkillInput(e.target.value)}
                       onKeyPress={(e) => e.key === "Enter" && handleAddSkill()}
                       size="small"
+                      sx={{ width: "100%"}}
                     />
                     <Button variant="outlined" onClick={handleAddSkill} startIcon={<Add />}>
                       Add
@@ -209,9 +228,8 @@ const PostJob = () => {
                     ))}
                   </Box>
                 </Box>
-              </Grid>
-              <Grid item xs={12}>
-                <Box sx={{ display: "flex", gap: 2, justifyContent: "flex-end" }}>
+                {/* Buttons centered under Required Skills */}
+                <Box sx={{ display: "flex", gap: 2, justifyContent: "center", mt: 2 }}>
                   <Button variant="outlined" size="large">
                     Save as Draft
                   </Button>

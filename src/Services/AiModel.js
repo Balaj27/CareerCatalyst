@@ -2,7 +2,7 @@ import { Gem } from "lucide-react";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
 
-const apiKey = "AIzaSyArMqpUUW8LrcEqbdNU282S7QpssCxqUlA";
+const apiKey = "AIzaSyDyU0GXBc4pkQQLNJrwlSxNA1GZnK6XGOY";
 const genAI = new GoogleGenerativeAI(apiKey);
 
 const model = genAI.getGenerativeModel({
