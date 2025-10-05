@@ -175,7 +175,7 @@ export default function Navbar() {
     { text: "Home", href: "/" },
     { text: "Find Jobs", href: "/find-jobs" },
     { text: "Resume Builder", href: "/resume" },
-    { text: "Mock-Interview Preparation", href: "/interview-prep" },
+    { text: "Interview Preparation", href: "/interview-prep" },
     { text: "Career Path Predictor", href: "/career-path-predictor" },
   ];
 

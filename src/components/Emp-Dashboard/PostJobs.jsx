@@ -17,7 +17,9 @@ import {
   Alert,
 } from "@mui/material"
 import { Add, Delete } from "@mui/icons-material"
-import AIJobAutoFillButton from "../../Services/AiJobButton"
+import AIJobAutoFillButton from "../../Services/AiJobButton" // <-- Import the AI button component
+import { db, auth } from "../../lib/firebase" // <-- Import from your lib directory
+import { collection, addDoc } from "firebase/firestore"
 
 const PostJob = () => {
   const [jobData, setJobData] = useState({
@@ -33,6 +35,7 @@ const PostJob = () => {
   })
   const [skillInput, setSkillInput] = useState("")
   const [showSuccess, setShowSuccess] = useState(false)
+  const [showError, setShowError] = useState("")
 
   const handleInputChange = (field) => (event) => {
     setJobData({ ...jobData, [field]: event.target.value })
@@ -65,25 +68,43 @@ const PostJob = () => {
     }))
   }
 
-  const handleSubmit = (event) => {
-    event.preventDefault()
-    // Here you would typically send the data to your backend
-    console.log("Job posted:", jobData)
-    setShowSuccess(true)
-    setTimeout(() => setShowSuccess(false), 3000)
+  // Save job to Firebase Firestore under employers/{employerId}/jobs
+  const saveJobPosting = async (jobData) => {
+    const user = auth.currentUser // logged in employer
 
-    // Reset form
-    setJobData({
-      title: "",
-      company: "",
-      location: "",
-      jobType: "",
-      experience: "",
-      salary: "",
-      description: "",
-      requirements: "",
-      skills: [],
+    if (!user) throw new Error("User not logged in!")
+
+    const jobsCollection = collection(db, "employers", user.uid, "jobs")
+    const jobRef = await addDoc(jobsCollection, {
+      ...jobData,
+      postedAt: new Date().toISOString()
     })
+    return jobRef.id
+  }
+
+  const handleSubmit = async (event) => {
+    event.preventDefault()
+    setShowError("")
+    try {
+      await saveJobPosting(jobData)
+      setShowSuccess(true)
+      setTimeout(() => setShowSuccess(false), 3000)
+
+      // Reset form
+      setJobData({
+        title: "",
+        company: "",
+        location: "",
+        jobType: "",
+        experience: "",
+        salary: "",
+        description: "",
+        requirements: "",
+        skills: [],
+      })
+    } catch (err) {
+      setShowError("Failed to post job: " + err.message)
+    }
   }
 
   return (
@@ -98,6 +119,11 @@ const PostJob = () => {
       {showSuccess && (
         <Alert severity="success" sx={{ mb: 3 }}>
           Job posted successfully! It will be reviewed and published shortly.
+        </Alert>
+      )}
+      {showError && (
+        <Alert severity="error" sx={{ mb: 3 }}>
+          {showError}
         </Alert>
       )}
 
@@ -230,8 +256,18 @@ const PostJob = () => {
                 </Box>
                 {/* Buttons centered under Required Skills */}
                 <Box sx={{ display: "flex", gap: 2, justifyContent: "center", mt: 2 }}>
-                  <Button variant="outlined" size="large">
-                    Save as Draft
+                  <Button variant="outlined" size="large" type="button" onClick={() => setJobData({
+                    title: "",
+                    company: "",
+                    location: "",
+                    jobType: "",
+                    experience: "",
+                    salary: "",
+                    description: "",
+                    requirements: "",
+                    skills: [],
+                  })}>
+                    Clear
                   </Button>
                   <Button
                     type="submit"

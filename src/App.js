@@ -21,6 +21,7 @@ import MCQsPage from "./Page/McqPage";
 import MockInterviewPage from "./Page/Interview"
 import EmployerSetup from "./Page/EmployerSetup";
 import EmpDash from "./Page/EmployerDashboard";
+import JobScrapperPage from "./Page/Scrapper";
 
 function App() {
   return (
@@ -134,6 +135,15 @@ function App() {
             element={
               <ProtectedRoute>
                 <EmployerSetup />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/scrap"
+            element={
+              <ProtectedRoute>
+                <JobScrapperPage />
               </ProtectedRoute>
             }
           />

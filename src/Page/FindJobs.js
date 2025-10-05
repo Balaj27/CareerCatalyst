@@ -1130,6 +1130,10 @@ const FindJobs = () => {
             </SearchButton>
           </SearchContainer>
 
+          <Button href="/scrap" target="_self" rel="noopener" variant="outlined" sx={{ mt: 2, mb: 1 }}>
+            Scrape Jobs
+          </Button>
+
           <Typography variant="body2" sx={{ mt: 3, fontStyle: "italic", opacity: 0.8 }}>
             • Popular Search: UI, Software Engineer
           </Typography>

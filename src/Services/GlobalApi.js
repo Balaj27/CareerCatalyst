@@ -1,5 +1,5 @@
 import axios from "axios";
-const API_KEY = "AIzaSyArMqpUUW8LrcEqbdNU282S7QpssCxqUlA";
+const API_KEY = "AIzaSyDGm9mQpoI-DMUxGpCYuTpYSQ-CaWmnzr4";
 
 const axiosInstance = axios.create({
   baseURL: "http://localhost:5001/" + "api/",

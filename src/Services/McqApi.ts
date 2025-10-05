@@ -1,363 +1,533 @@
-import { GoogleGenerativeAI } from "@google/generative-ai"
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
-const apiKey = "AIzaSyArMqpUUW8LrcEqbdNU282S7QpssCxqUlA"
-const genAI = new GoogleGenerativeAI(apiKey)
+const apiKey: string = "AIzaSyDyU0GXBc4pkQQLNJrwlSxNA1GZnK6XGOY";
+const genAI = new GoogleGenerativeAI(apiKey);
 
 const model = genAI.getGenerativeModel({
-  model: "gemini-1.5-flash",
-})
+  model: "gemini-2.5-flash-lite",
+});
 
 const generationConfig = {
-  temperature: 0.7,
+  temperature: 1,
   topP: 0.95,
   topK: 64,
   maxOutputTokens: 8192,
   responseMimeType: "application/json",
-}
+};
 
 interface Question {
-  id: number
-  question: string
-  options: string[]
-  correctAnswer: number
-  explanation: string
+  id: number;
+  question: string;
+  options: string[];
+  correctAnswer: number;
+  explanation: string;
 }
 
 interface InterviewResponse {
-  question: string
-  answer: string
-  duration: number
+  question: string;
+  answer: string;
+  duration: number;
 }
 
+interface AnalysisResult {
+  overallScore: number;
+  confidence: "High" | "Medium" | "Low";
+  tone: "Professional" | "Confident" | "Nervous" | "Casual";
+  answerQuality: "Excellent" | "Good" | "Satisfactory" | "Needs Improvement";
+  strengths: string[];
+  improvements: string[];
+  feedback: string;
+  technicalKnowledge: string;
+  communicationSkills: string;
+  responseTime: string;
+  readinessLevel: "Ready for Role" | "Needs More Practice" | "Requires Significant Development";
+  keyInsights: string;
+  specificRecommendations: string;
+}
+
+type DifficultyLevel = "junior" | "beginner" | "mid" | "intermediate" | "senior" | "advanced";
+
+// Generate unique MCQ questions using AI with robust validation
 export const generateMCQs = async (jobTitle: string, difficulty: string, count: number): Promise<Question[]> => {
   try {
-    const prompt = `Generate exactly ${count} multiple choice questions for a ${jobTitle} interview at ${difficulty} level.
+    // Create unique context for each generation
+    const timestamp: number = Date.now();
+    const randomElements: string = Math.random().toString(36).substring(2, 15);
+    const sessionId: string = `${timestamp}_${randomElements}`;
 
-Requirements:
-- Questions should be relevant to ${jobTitle} role
-- Difficulty level: ${difficulty}
-- Each question must have exactly 4 options
-- Include practical scenarios and technical knowledge
-- Provide clear explanations
+    const prompt: string = `Generate ${count} completely unique and different multiple choice questions for "${jobTitle}" role interview.
 
-Return ONLY a valid JSON array with this exact structure:
+CRITICAL REQUIREMENTS:
+🎯 Job Role: ${jobTitle}
+📊 Difficulty: ${difficulty}  
+🔄 Session ID: ${sessionId} (ensure this generates unique questions every time)
+⚡ Make each question completely different from standard templates
+
+STRICT JSON FORMAT REQUIREMENTS:
+- Each question MUST have exactly 4 options
+- correctAnswer MUST be a number: 0, 1, 2, or 3 (NEVER any other value)
+- All fields are required and must be strings except correctAnswer (number)
+
+UNIQUENESS RULES:
+- Each question must test different skills/knowledge areas for ${jobTitle}
+- Use varied question formats (scenario, design principles, tools, best practices, user research)
+- Include real-world situations specific to ${jobTitle}
+- Mix theoretical knowledge with practical application
+- Reference current technologies and methodologies relevant to ${jobTitle}
+
+FOR ${jobTitle.toUpperCase()} ROLE, FOCUS ON:
+${getFieldSpecificGuidelines(jobTitle, difficulty)}
+
+EXAMPLE STRUCTURE (follow exactly):
 [
   {
     "id": 1,
-    "question": "What is the primary responsibility of a ${jobTitle}?",
-    "options": ["Option A", "Option B", "Option C", "Option D"],
-    "correctAnswer": 0,
-    "explanation": "Brief explanation of why this answer is correct"
+    "question": "When designing a mobile app interface for ${jobTitle}, what is the most important consideration for thumb-friendly navigation?",
+    "options": ["Option A with specific details", "Option B with specific details", "Option C with specific details", "Option D with specific details"],
+    "correctAnswer": 2,
+    "explanation": "Detailed explanation why option C is correct for ${jobTitle} professionals"
   }
 ]
 
-Make sure:
-- correctAnswer is the index (0-3) of the correct option
-- Questions are appropriate for ${difficulty} level
-- Focus on real-world scenarios and best practices
-- Each question tests different aspects of the role`
+VALIDATION RULES:
+- correctAnswer MUST be 0, 1, 2, or 3 only
+- Each option must be different and specific
+- Question must be specific to ${jobTitle}, not generic
+- All text must be professional and clear
+
+Generate ${count} completely different questions following this exact format!`;
+
+    console.log(`🚀 Generating ${count} unique questions for ${jobTitle} (${difficulty})...`);
 
     const chatSession = model.startChat({
       generationConfig,
       history: [],
-    })
+    });
 
-    const result = await chatSession.sendMessage(prompt)
-    const response = await result.response
-    const text = response.text()
+    const result = await chatSession.sendMessage(prompt);
+    const response = await result.response;
+    const text: string = response.text();
 
-    // Parse the JSON response
-    let questions: Question[]
+    console.log(`📝 AI Response received for ${jobTitle}`);
+
+    // Parse the AI response with robust cleaning
+    let cleanedText: string = text.trim();
+    
+    // Remove markdown formatting if present
+    if (cleanedText.includes('```json')) {
+      cleanedText = cleanedText.replace(/```json\s*/g, '').replace(/```\s*/g, '');
+    } else if (cleanedText.includes('```')) {
+      cleanedText = cleanedText.replace(/```\s*/g, '');
+    }
+
+    // Remove any extra text before or after JSON
+    const jsonStart: number = cleanedText.indexOf('[');
+    const jsonEnd: number = cleanedText.lastIndexOf(']');
+    
+    if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd > jsonStart) {
+      cleanedText = cleanedText.substring(jsonStart, jsonEnd + 1);
+    }
+
     try {
-      questions = JSON.parse(text)
+      const rawQuestions: any[] = JSON.parse(cleanedText);
 
-      // Validate the response structure
-      if (!Array.isArray(questions) || questions.length !== count) {
-        throw new Error("Invalid response format")
+      // Validate response is array
+      if (!Array.isArray(rawQuestions)) {
+        throw new Error(`Response is not an array: ${typeof rawQuestions}`);
       }
 
-      // Validate each question
-      questions.forEach((q, index) => {
-        if (
-          !q.question ||
-          !Array.isArray(q.options) ||
-          q.options.length !== 4 ||
-          typeof q.correctAnswer !== "number" ||
-          q.correctAnswer < 0 ||
-          q.correctAnswer > 3 ||
-          !q.explanation
-        ) {
-          throw new Error(`Invalid question format at index ${index}`)
+      if (rawQuestions.length === 0) {
+        throw new Error('No questions generated by AI');
+      }
+
+      console.log(`📋 Processing ${rawQuestions.length} questions from AI...`);
+
+      // Process and validate each question with auto-fixing
+      const validQuestions: Question[] = rawQuestions.slice(0, count).map((q: any, index: number): Question => {
+        // Validate and fix question structure
+        if (!q.question || typeof q.question !== 'string' || q.question.trim() === '') {
+          throw new Error(`Invalid or empty question at index ${index}`);
         }
-        // Ensure id is set correctly
-        q.id = index + 1
-      })
 
-      return questions
-    } catch (parseError) {
-      console.error("Error parsing AI response:", parseError)
-      console.log("Raw AI response:", text)
-      throw new Error("Failed to parse AI response")
+        if (!Array.isArray(q.options)) {
+          throw new Error(`Options is not an array at index ${index}`);
+        }
+
+        // Ensure exactly 4 options
+        if (q.options.length !== 4) {
+          throw new Error(`Question ${index} has ${q.options.length} options, must have exactly 4`);
+        }
+
+        // Validate each option
+        q.options.forEach((option: any, optIndex: number) => {
+          if (!option || typeof option !== 'string' || option.trim() === '') {
+            throw new Error(`Invalid option ${optIndex} at question ${index}`);
+          }
+        });
+
+        // Fix correctAnswer validation - this is the key fix!
+        let correctAnswer: number = q.correctAnswer;
+        
+        // Convert string numbers to integers
+        if (typeof correctAnswer === 'string') {
+          correctAnswer = parseInt(correctAnswer, 10);
+        }
+        
+        // Validate correctAnswer is a valid number
+        if (typeof correctAnswer !== 'number' || isNaN(correctAnswer)) {
+          console.warn(`⚠️ Invalid correctAnswer at index ${index}: ${q.correctAnswer}, defaulting to 0`);
+          correctAnswer = 0;
+        }
+        
+        // Ensure correctAnswer is in valid range (0-3)
+        if (correctAnswer < 0 || correctAnswer > 3) {
+          console.warn(`⚠️ correctAnswer ${correctAnswer} out of range at index ${index}, fixing to ${correctAnswer % 4}`);
+          correctAnswer = Math.abs(correctAnswer % 4); // Fix to valid range
+        }
+
+        if (!q.explanation || typeof q.explanation !== 'string' || q.explanation.trim() === '') {
+          console.warn(`⚠️ Missing explanation at index ${index}, generating default`);
+          q.explanation = `This is the correct answer for ${jobTitle} professionals based on industry best practices.`;
+        }
+
+        return {
+          id: index + 1,
+          question: q.question.trim(),
+          options: q.options.map((opt: string) => opt.trim()),
+          correctAnswer: correctAnswer,
+          explanation: q.explanation.trim()
+        };
+      });
+
+      console.log(`✅ Successfully processed ${validQuestions.length} valid questions for ${jobTitle}`);
+      
+      // Log sample question for debugging
+      if (validQuestions.length > 0) {
+        console.log(`📝 Sample question: "${validQuestions[0].question.substring(0, 50)}..."`);
+        console.log(`🎯 Correct answer index: ${validQuestions[0].correctAnswer}`);
+      }
+
+      return validQuestions;
+
+    } catch (parseError: any) {
+      console.error(`❌ Parse error for ${jobTitle}:`, parseError);
+      console.error('Raw response (first 500 chars):', text.substring(0, 500));
+      console.error('Cleaned text (first 500 chars):', cleanedText.substring(0, 500));
+      throw new Error(`Failed to parse AI response: ${parseError.message}`);
     }
-  } catch (error) {
-    console.error("Error generating MCQs:", error)
 
-    // Fallback to sample questions if AI fails
-    return generateFallbackQuestions(jobTitle, difficulty, count)
+  } catch (error: any) {
+    console.error(`💥 Error generating questions for ${jobTitle}:`, error);
+    throw new Error(`Failed to generate questions: ${error.message}`);
   }
+};
+
+// Get field-specific guidelines for the AI prompt
+function getFieldSpecificGuidelines(jobTitle: string, difficulty: string): string {
+  const role: string = jobTitle.toLowerCase();
+  
+  if (role.includes('ui') || role.includes('ux') || role.includes('designer')) {
+    return `
+- User research methods and usability testing
+- Design systems and component libraries  
+- Wireframing and prototyping tools (Figma, Sketch, Adobe XD)
+- Information architecture and user flows
+- Visual design principles and accessibility (WCAG)
+- Design thinking methodology and user personas
+- Interaction design and micro-interactions
+- Mobile-first and responsive design principles
+- Color theory, typography, and visual hierarchy
+- User testing and feedback incorporation
+- Collaboration with developers and stakeholders
+- Design handoff and documentation practices`;
+  }
+  
+  if (role.includes('software') || role.includes('developer') || role.includes('programmer')) {
+    return `
+- Programming languages, frameworks, and tools
+- Code quality, testing, and debugging techniques
+- System architecture and design patterns
+- Database design and optimization strategies
+- API development and integration methods
+- Security best practices and implementation
+- Performance optimization and scalability`;
+  }
+  
+  if (role.includes('data scientist') || role.includes('data analyst')) {
+    return `
+- Machine learning algorithms and model selection
+- Statistical analysis and hypothesis testing methods
+- Data preprocessing and feature engineering techniques
+- Python/R libraries (pandas, scikit-learn, numpy)
+- Data visualization and storytelling with data
+- Model evaluation, validation, and deployment
+- Big data technologies and cloud platforms`;
+  }
+  
+  if (role.includes('devops') || role.includes('sre') || role.includes('infrastructure')) {
+    return `
+- Cloud platforms (AWS, Azure, GCP) and services
+- Container orchestration (Docker, Kubernetes)
+- Infrastructure as Code (Terraform, CloudFormation)
+- CI/CD pipelines and automation tools
+- Monitoring, logging, and alerting systems
+- Security and compliance frameworks
+- System scalability and reliability engineering`;
+  }
+  
+  if (role.includes('frontend') || role.includes('react') || role.includes('vue')) {
+    return `
+- Modern JavaScript/TypeScript frameworks and libraries
+- Responsive design and CSS methodologies
+- Web performance optimization techniques
+- Browser compatibility and cross-platform testing
+- State management and component architecture
+- Accessibility standards and implementation
+- Build tools and development workflow optimization`;
+  }
+  
+  if (role.includes('backend') || role.includes('api') || role.includes('server')) {
+    return `
+- Server-side technologies and framework selection
+- Database design and query optimization
+- API design patterns and microservices architecture
+- Caching strategies and performance optimization
+- Security implementation and authentication methods
+- Scalability planning and load balancing
+- Message queues and asynchronous processing`;
+  }
+  
+  if (role.includes('product manager') || role.includes('pm')) {
+    return `
+- Product strategy development and roadmap planning
+- User research methodologies and market analysis
+- Agile methodologies and project management frameworks
+- Stakeholder communication and alignment strategies
+- Feature prioritization frameworks and decision-making
+- Metrics definition, KPI tracking, and analytics
+- A/B testing design and data-driven decision making`;
+  }
+  
+  if (role.includes('security') || role.includes('cybersecurity')) {
+    return `
+- Threat analysis and risk assessment methodologies
+- Security frameworks and compliance requirements
+- Penetration testing and vulnerability assessment
+- Incident response and digital forensics
+- Network security and monitoring systems
+- Identity and access management solutions
+- Security tools and threat detection technologies`;
+  }
+  
+  // Generic tech role guidelines
+  return `
+- Technical problem-solving methodologies
+- Industry best practices and current standards
+- Team collaboration and communication strategies
+- Technology trends and innovation adoption
+- Project management and delivery methodologies
+- Quality assurance and testing approaches
+- Professional development and continuous learning`;
 }
 
 // Generate interview questions for voice interview
 export const generateInterviewQuestions = async (
   jobTitle: string,
   difficulty: string,
-  count = 8,
+  count: number = 8,
 ): Promise<string[]> => {
   try {
-    const prompt = `Generate exactly ${count} interview questions for a ${jobTitle} position at ${difficulty} level.
+    const timestamp: number = Date.now();
+    const randomSeed: string = Math.random().toString(36).substring(2, 10);
+    const uniqueId: string = `${timestamp}_${randomSeed}`;
 
-Requirements:
-- Questions should be open-ended and suitable for verbal responses
-- Mix of technical, behavioral, and situational questions
-- Appropriate for ${difficulty} level candidates
-- Focus on real-world scenarios and practical experience
-- Questions should encourage detailed responses
-- Include both role-specific and general professional questions
+    const prompt: string = `Generate ${count} unique interview questions for "${jobTitle}" position at ${difficulty} level.
 
-Return ONLY a valid JSON array of strings:
-["Question 1 here?", "Question 2 here?", "Question 3 here?"]
+UNIQUENESS REQUIREMENTS:
+🔄 Unique Session: ${uniqueId}
+🎯 Role: ${jobTitle}
+📊 Level: ${difficulty}
+⭐ Generate completely different questions each time this is called
 
-Make questions conversational and natural for a voice interview.`
+QUESTION TYPES TO INCLUDE:
+1. Technical expertise and hands-on experience
+2. Problem-solving scenarios specific to ${jobTitle}
+3. Past project challenges and creative solutions
+4. Behavioral and team collaboration situations
+5. Leadership and mentorship experiences
+6. Industry knowledge and emerging trends
+7. Career motivation and professional growth
+8. Role-specific challenges and methodologies
+
+${getInterviewGuidelines(jobTitle, difficulty)}
+
+REQUIREMENTS:
+- Each question should encourage detailed storytelling
+- Mix technical depth with behavioral insights
+- Include hypothetical scenarios and real-world problems
+- Questions should reveal thought processes and approach
+- Natural conversation flow for voice interviews
+- Specific to ${jobTitle} responsibilities and challenges
+
+Return ONLY a JSON array of question strings:
+["Question 1 about specific ${jobTitle} experience?", "Question 2 about ${jobTitle} challenges?", ...]
+
+Make every question unique, engaging, and ${jobTitle}-specific!`;
 
     const chatSession = model.startChat({
-      generationConfig,
+      generationConfig: {
+        ...generationConfig,
+        temperature: 1.2,
+      },
       history: [],
-    })
+    });
 
-    const result = await chatSession.sendMessage(prompt)
-    const response = await result.response
-    const text = response.text()
+    const result = await chatSession.sendMessage(prompt);
+    const response = await result.response;
+    let text: string = response.text().trim();
 
-    const questions: string[] = JSON.parse(text)
-    
-    // Validate questions
-    if (!Array.isArray(questions) || questions.length !== count) {
-      throw new Error("Invalid questions format")
+    // Clean response
+    if (text.includes('```json')) {
+      text = text.replace(/```json\s*/g, '').replace(/```\s*/g, '');
+    } else if (text.includes('```')) {
+      text = text.replace(/```\s*/g, '');
     }
 
-    return questions
-  } catch (error) {
-    console.error("Error generating interview questions:", error)
+    const questions: string[] = JSON.parse(text);
+    
+    if (!Array.isArray(questions) || questions.length === 0) {
+      throw new Error('Invalid questions format');
+    }
 
-    // Fallback questions
-    return [
-      `Tell me about yourself and your experience as a ${jobTitle}.`,
-      `What interests you most about this ${jobTitle} position?`,
-      "Describe a challenging project you've worked on recently and how you overcame the obstacles.",
-      "How do you handle tight deadlines and work under pressure?",
-      "What are your greatest strengths and how do they apply to this role?",
-      "Tell me about a time when you had to learn a new technology or skill quickly.",
-      "How do you stay updated with the latest trends and developments in your field?",
-      "Where do you see yourself in your career in the next 5 years?",
-    ]
+    console.log(`✅ Generated ${questions.length} unique interview questions for ${jobTitle}`);
+    return questions.slice(0, count);
+
+  } catch (error: any) {
+    console.error(`❌ Error generating interview questions for ${jobTitle}:`, error);
+    throw new Error(`Failed to generate interview questions: ${error.message}`);
   }
+};
+
+// Get interview-specific guidelines
+function getInterviewGuidelines(jobTitle: string, difficulty: string): string {
+  const level: string = difficulty.toLowerCase();
+  
+  let guidelines: string = `
+DIFFICULTY-SPECIFIC FOCUS (${difficulty.toUpperCase()} LEVEL):
+`;
+  
+  if (level === 'junior' || level === 'beginner') {
+    guidelines += `
+- Learning ability and growth mindset demonstration
+- Basic technical skills and fundamental knowledge
+- Educational projects, internships, and personal projects
+- Enthusiasm and motivation to learn and grow
+- Problem-solving approach for straightforward challenges
+- Teamwork and communication in learning environments`;
+  } else if (level === 'mid' || level === 'intermediate') {
+    guidelines += `
+- Proven professional experience and measurable achievements
+- Complex problem-solving and strategic decision-making
+- Team collaboration, mentorship, and knowledge sharing
+- Technical leadership in projects and initiatives
+- Process improvement and optimization contributions
+- Cross-functional collaboration and communication`;
+  } else if (level === 'senior' || level === 'advanced') {
+    guidelines += `
+- Strategic thinking and high-level architectural decisions
+- Cross-functional leadership and organizational influence
+- Mentoring, coaching, and team development activities
+- Business impact measurement and stakeholder management
+- Innovation leadership and technology evolution guidance
+- Industry thought leadership and community contributions`;
+  }
+
+  return guidelines;
 }
 
-// Analyze interview performance
+// Analyze interview performance with enhanced analysis
 export const analyzeInterviewPerformance = async (
   jobTitle: string,
   difficulty: string,
   responses: InterviewResponse[],
-): Promise<any> => {
+): Promise<AnalysisResult> => {
   try {
-    const prompt = `Analyze the interview performance for a ${jobTitle} position at ${difficulty} level.
+    const uniqueAnalysisId: string = `${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+    
+    const responsesData = responses.map((r: InterviewResponse, i: number) => ({
+      questionNumber: i + 1,
+      question: r.question,
+      answer: r.answer || "No response provided",
+      duration: Math.round(r.duration / 1000),
+      wordCount: r.answer ? r.answer.split(' ').filter(word => word.length > 0).length : 0
+    }));
 
-Interview Data:
-${responses.map((r, i) => `
-Question ${i + 1}: ${r.question}
-Answer: ${r.answer}
-Response Time: ${Math.round(r.duration / 1000)} seconds
-`).join('\n')}
+    const prompt: string = `Analyze this ${jobTitle} interview performance (${difficulty} level):
 
-Provide a comprehensive analysis in the following JSON format:
+ANALYSIS SESSION: ${uniqueAnalysisId}
+ROLE: ${jobTitle}
+LEVEL: ${difficulty}
+
+INTERVIEW RESPONSES:
+${responsesData.map(r => `
+Question ${r.questionNumber}: ${r.question}
+Response: ${r.answer}
+Duration: ${r.duration} seconds
+Word Count: ${r.wordCount} words
+---`).join('\n')}
+
+ANALYSIS REQUIREMENTS:
+Provide comprehensive, constructive analysis focusing on:
+- Technical competency for ${jobTitle} role
+- Communication effectiveness and clarity
+- Problem-solving approach and methodology
+- Professional experience demonstration
+- Confidence and presentation skills
+- Role-specific knowledge and insights
+- Areas of strength and improvement opportunities
+
+Return analysis in this EXACT JSON format:
 {
-  "overallScore": 85,
-  "confidence": "High/Medium/Low",
-  "tone": "Professional/Casual/Nervous",
-  "answerQuality": "Excellent/Good/Satisfactory/Needs Improvement",
-  "strengths": ["strength1", "strength2", "strength3"],
-  "improvements": ["improvement1", "improvement2", "improvement3"],
-  "feedback": "Detailed overall feedback paragraph",
-  "technicalKnowledge": "Assessment of technical knowledge demonstrated",
-  "communicationSkills": "Assessment of communication effectiveness",
-  "responseTime": "Analysis of response timing and pacing"
+  "overallScore": 78,
+  "confidence": "High|Medium|Low",
+  "tone": "Professional|Confident|Nervous|Casual",
+  "answerQuality": "Excellent|Good|Satisfactory|Needs Improvement",
+  "strengths": ["Specific strength 1", "Specific strength 2", "Specific strength 3"],
+  "improvements": ["Specific improvement 1", "Specific improvement 2", "Specific improvement 3"],
+  "feedback": "Detailed 2-3 sentence constructive feedback paragraph",
+  "technicalKnowledge": "Assessment of technical skills demonstrated",
+  "communicationSkills": "Evaluation of communication effectiveness",
+  "responseTime": "Analysis of response pacing and timing",
+  "readinessLevel": "Ready for Role|Needs More Practice|Requires Significant Development",
+  "keyInsights": "Most notable observations about the candidate",
+  "specificRecommendations": "Actionable steps for improvement"
 }
 
-Analyze:
-1. Content quality and relevance of answers
-2. Communication clarity and structure
-3. Confidence level based on language used
-4. Technical knowledge demonstration
-5. Professional tone and demeanor
-6. Response timing (too fast/slow/appropriate)
-7. Specific examples and details provided
-8. Overall interview readiness
-
-Be constructive and provide actionable feedback.`
+Provide honest, specific, and actionable feedback for ${jobTitle} role preparation.`;
 
     const chatSession = model.startChat({
-      generationConfig,
+      generationConfig: {
+        ...generationConfig,
+        temperature: 0.7,
+      },
       history: [],
-    })
+    });
 
-    const result = await chatSession.sendMessage(prompt)
-    const response = await result.response
-    const text = response.text()
+    const result = await chatSession.sendMessage(prompt);
+    const response = await result.response;
+    let text: string = response.text().trim();
 
-    const analysis = JSON.parse(text)
-    return analysis
-  } catch (error) {
-    console.error("Error analyzing performance:", error)
-
-    // Fallback analysis
-    const avgResponseTime = responses.reduce((acc, r) => acc + r.duration, 0) / responses.length / 1000
-    const answeredQuestions = responses.filter(r => r.answer !== "No response provided").length
-    const responseRate = (answeredQuestions / responses.length) * 100
-
-    return {
-      overallScore: Math.min(Math.max(Math.round(responseRate * 0.8 + (avgResponseTime < 30 ? 20 : 10)), 40), 95),
-      confidence: avgResponseTime < 15 ? "High" : avgResponseTime < 30 ? "Medium" : "Low",
-      tone: "Professional",
-      answerQuality: responseRate > 80 ? "Good" : responseRate > 60 ? "Satisfactory" : "Needs Improvement",
-      strengths: [
-        "Participated in the interview process",
-        "Demonstrated willingness to engage",
-        answeredQuestions > responses.length * 0.8 ? "Answered most questions" : "Showed effort in responding"
-      ],
-      improvements: [
-        avgResponseTime > 30 ? "Work on response timing" : "Provide more detailed examples",
-        "Practice articulating thoughts clearly",
-        "Prepare specific examples from experience"
-      ],
-      feedback: `You completed ${answeredQuestions} out of ${responses.length} questions with an average response time of ${Math.round(avgResponseTime)} seconds. ${responseRate > 70 ? "Good participation overall." : "Consider practicing more to improve response rate."} Focus on providing specific examples and maintaining a steady pace during responses.`,
-      technicalKnowledge: "Assessment based on provided responses",
-      communicationSkills: avgResponseTime < 20 ? "Quick responses, ensure clarity" : "Take time to structure responses well",
-      responseTime: avgResponseTime < 15 ? "Very quick responses" : avgResponseTime < 30 ? "Good pacing" : "Consider more concise responses"
+    // Clean response
+    if (text.includes('```json')) {
+      text = text.replace(/```json\s*/g, '').replace(/```\s*/g, '');
     }
+
+    const analysis: AnalysisResult = JSON.parse(text);
+    console.log(`✅ Generated analysis for ${jobTitle} interview`);
+    return analysis;
+
+  } catch (error: any) {
+    console.error(`❌ Error analyzing interview performance:`, error);
+    throw new Error(`Failed to analyze performance: ${error.message}`);
   }
-}
-
-// Fallback questions for MCQs
-const generateFallbackQuestions = (jobTitle: string, difficulty: string, count: number): Question[] => {
-  const baseQuestions = [
-    {
-      id: 1,
-      question: `What is a key responsibility of a ${jobTitle}?`,
-      options: [
-        "Writing clean, maintainable code",
-        "Managing team schedules only",
-        "Handling customer support exclusively",
-        "Working in isolation",
-      ],
-      correctAnswer: 0,
-      explanation: "Writing clean, maintainable code is a fundamental responsibility for technical roles.",
-    },
-    {
-      id: 2,
-      question: `Which skill is most important for a ${jobTitle} in ${difficulty} level positions?`,
-      options: [
-        "Only technical expertise",
-        "Only communication skills",
-        "Problem-solving and collaboration",
-        "Working without supervision",
-      ],
-      correctAnswer: 2,
-      explanation: "Problem-solving and collaboration are essential skills that combine technical and soft skills.",
-    },
-    {
-      id: 3,
-      question: `What is the best practice for code review in a ${jobTitle} role?`,
-      options: [
-        "Review code after deployment",
-        "Skip reviews for small changes",
-        "Review code before merging to main branch",
-        "Only senior developers should review",
-      ],
-      correctAnswer: 2,
-      explanation: "Code should always be reviewed before merging to maintain quality and catch issues early.",
-    },
-    {
-      id: 4,
-      question: `How should a ${jobTitle} handle technical debt?`,
-      options: [
-        "Ignore it completely",
-        "Address it gradually while developing new features",
-        "Fix everything at once",
-        "Leave it for the next team",
-      ],
-      correctAnswer: 1,
-      explanation: "Technical debt should be addressed gradually to maintain system health without blocking progress.",
-    },
-    {
-      id: 5,
-      question: `What is important when working in a team as a ${jobTitle}?`,
-      options: [
-        "Working in complete isolation",
-        "Clear communication and documentation",
-        "Avoiding all meetings",
-        "Only focusing on individual tasks",
-      ],
-      correctAnswer: 1,
-      explanation: "Clear communication and documentation are essential for effective teamwork and knowledge sharing.",
-    },
-    {
-      id: 6,
-      question: `Which approach is best for learning new technologies as a ${jobTitle}?`,
-      options: [
-        "Wait for formal training only",
-        "Learn everything at once",
-        "Continuous learning and hands-on practice",
-        "Avoid new technologies",
-      ],
-      correctAnswer: 2,
-      explanation: "Continuous learning and hands-on practice help stay current with evolving technologies.",
-    },
-    {
-      id: 7,
-      question: `How should a ${jobTitle} approach debugging complex issues?`,
-      options: [
-        "Guess randomly until something works",
-        "Systematic approach with logging and testing",
-        "Ask others to fix it immediately",
-        "Restart everything and hope it works",
-      ],
-      correctAnswer: 1,
-      explanation: "A systematic approach with proper logging and testing is the most effective debugging method.",
-    },
-    {
-      id: 8,
-      question: `What is the importance of documentation for a ${jobTitle}?`,
-      options: [
-        "Documentation is unnecessary",
-        "Only document after the project is complete",
-        "Document code, processes, and decisions continuously",
-        "Documentation is only for managers",
-      ],
-      correctAnswer: 2,
-      explanation: "Continuous documentation helps with maintenance, onboarding, and knowledge transfer.",
-    },
-  ]
-
-  // Generate questions to match the requested count
-  const questions: Question[] = []
-  for (let i = 0; i < count; i++) {
-    const baseQuestion = baseQuestions[i % baseQuestions.length]
-    questions.push({
-      ...baseQuestion,
-      id: i + 1,
-      question: baseQuestion.question.replace(/\${jobTitle}/g, jobTitle).replace(/\${difficulty}/g, difficulty),
-    })
-  }
-
-  return questions
-}
+};

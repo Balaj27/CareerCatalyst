@@ -1,12 +1,12 @@
 import { Gem } from "lucide-react";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
-
-const apiKey = "AIzaSyDyU0GXBc4pkQQLNJrwlSxNA1GZnK6XGOY";
+const apiKey = "AIzaSyBbhkLUVTDC1j9GpVBJyGcs3YYe2oQHoC0";  // replace with your key
 const genAI = new GoogleGenerativeAI(apiKey);
 
+// Use a newer model, e.g. gemini-2.5-flash-lite
 const model = genAI.getGenerativeModel({
-  model: "gemini-1.5-flash",
+  model: "gemini-2.5-flash-lite",
 });
 
 const generationConfig = {
@@ -19,7 +19,5 @@ const generationConfig = {
 
 export const AIChatSession = model.startChat({
   generationConfig,
-  // safetySettings: Adjust safety settings
-  // See https://ai.google.dev/gemini-api/docs/safety-settings
   history: [],
 });
