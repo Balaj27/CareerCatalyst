@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react"
 import {
   Box, Typography, TextField, Button, Alert, Snackbar, Accordion, AccordionSummary,
-  AccordionDetails, Grid, Divider, Switch, FormControlLabel
+  AccordionDetails, Grid, Divider, Switch, FormControlLabel, Chip, FormControl, InputLabel, Select, MenuItem
 } from "@mui/material"
 import { styled } from "@mui/material/styles"
 import {
@@ -63,7 +63,15 @@ const EditProfile = () => {
     fullName: "", jobTitle: "", email: "", phone: "", location: "", summary: "",
     education: [{ institution: "", degree: "", fieldOfStudy: "", startDate: "", endDate: "", description: "" }],
     experience: [{ company: "", position: "", location: "", startDate: "", endDate: "", current: false, description: "" }],
-    certifications: [{ name: "", organization: "", issueDate: "", expiryDate: "", credentialID: "", description: "" }]
+    certifications: [{ name: "", organization: "", issueDate: "", expiryDate: "", credentialID: "", description: "" }],
+    skills: [],
+    currentSkill: "",
+    desiredJobTitle: "",
+    jobType: "",
+    workEnvironment: "",
+    salaryMin: "",
+    salaryMax: "",
+    availability: ""
   })
 
   // FETCH DATA FROM FIRESTORE
@@ -92,12 +100,12 @@ const EditProfile = () => {
         // Fill from profile subdoc fields if present (priority)
         if (profileSnap.exists()) {
           const data = profileSnap.data()
-          fullName = data.fullName || fullName;
-          jobTitle = data.jobTitle || jobTitle;
-          email = data.email || email;
-          phone = data.phone || phone;
-          location = data.location || location;
-          summary = data.summary || summary;
+          fullName = data.fullName || data.personalInfo?.fullName || fullName;
+          jobTitle = data.jobTitle || data.personalInfo?.jobTitle || jobTitle;
+          email = data.email || data.personalInfo?.email || email;
+          phone = data.phone || data.personalInfo?.phone || phone;
+          location = data.location || data.personalInfo?.location || location;
+          summary = data.summary || data.personalInfo?.summary || summary;
           setFormData({
             fullName,
             jobTitle,
@@ -129,20 +137,34 @@ const EditProfile = () => {
             certifications: Array.isArray(data.certifications) && data.certifications.length > 0
               ? data.certifications.map(cert => ({
                 name: cert.name || "",
-                organization: cert.organization || "",
-                issueDate: cert.issueDate || "",
+                organization: cert.organization || cert.issuer || "",
+                issueDate: cert.issueDate || cert.date || "",
                 expiryDate: cert.expiryDate || "",
-                credentialID: cert.credentialID || "",
+                credentialID: cert.credentialID || cert.url || "",
                 description: cert.description || ""
               }))
-              : [{ name: "", organization: "", issueDate: "", expiryDate: "", credentialID: "", description: "" }]
+              : [{ name: "", organization: "", issueDate: "", expiryDate: "", credentialID: "", description: "" }],
+            skills: Array.isArray(data.skills) ? data.skills : [],
+            desiredJobTitle: data.jobPreferences?.desiredJobTitle || "",
+            jobType: data.jobPreferences?.jobType || "",
+            workEnvironment: data.jobPreferences?.workEnvironment || "",
+            salaryMin: data.jobPreferences?.salaryMin || "",
+            salaryMax: data.jobPreferences?.salaryMax || "",
+            availability: data.jobPreferences?.availability || ""
           })
         } else {
           setFormData({
             fullName, jobTitle, email, phone, location, summary,
             education: [{ institution: "", degree: "", fieldOfStudy: "", startDate: "", endDate: "", description: "" }],
             experience: [{ company: "", position: "", location: "", startDate: "", endDate: "", current: false, description: "" }],
-            certifications: [{ name: "", organization: "", issueDate: "", expiryDate: "", credentialID: "", description: "" }]
+            certifications: [{ name: "", organization: "", issueDate: "", expiryDate: "", credentialID: "", description: "" }],
+            skills: [],
+            desiredJobTitle: "",
+            jobType: "",
+            workEnvironment: "",
+            salaryMin: "",
+            salaryMax: "",
+            availability: ""
           })
         }
       } catch (e) {
@@ -157,7 +179,18 @@ const EditProfile = () => {
   }, [currentUser, loading])
 
   // Utility handlers
-  const updateForm = (field, value) => setFormData(prev => ({ ...prev, [field]: value }))
+  const updateForm = (field, value) => {
+    setFormData(prev => {
+      const newData = { ...prev, [field]: value }
+      
+      // Auto-sync desiredJobTitle to jobTitle
+      if (field === 'desiredJobTitle' && value) {
+        newData.jobTitle = value
+      }
+      
+      return newData
+    })
+  }
   const updateArrayField = (arrayField, index, field, value) => {
     setFormData(prev => {
       const arr = [...prev[arrayField]]
@@ -175,25 +208,38 @@ const EditProfile = () => {
     e.preventDefault()
     setIsLoading(true)
     try {
-      // Update top-level user doc
+      // Update top-level user doc with displayName and jobTitle
       const userDocRef = doc(db, "employees", currentUser.uid);
       await setDoc(userDocRef, {
         displayName: formData.fullName,
-        jobTitle: formData.jobTitle,
-        email: formData.email,
-        phone: formData.phone,
-        location: formData.location,
-        summary: formData.summary
-      }, { merge: true });
-      // Update profile subdoc
-      const profileRef = doc(db, "employees", currentUser.uid, "employee data", "profile")
-      await setDoc(profileRef, {
-        fullName: formData.fullName,
-        jobTitle: formData.jobTitle,
+        jobTitle: formData.desiredJobTitle || formData.jobTitle, // Use desiredJobTitle if available, fallback to jobTitle
         email: formData.email,
         phone: formData.phone,
         location: formData.location,
         summary: formData.summary,
+        lastUpdated: new Date()
+      }, { merge: true });
+      
+      // Update profile subdoc with all data
+      const profileRef = doc(db, "employees", currentUser.uid, "employee data", "profile")
+      await setDoc(profileRef, {
+        // Personal info
+        fullName: formData.fullName,
+        jobTitle: formData.desiredJobTitle || formData.jobTitle, // Use desiredJobTitle if available, fallback to jobTitle
+        email: formData.email,
+        phone: formData.phone,
+        location: formData.location,
+        summary: formData.summary,
+        // Also update personalInfo object for backward compatibility
+        personalInfo: {
+          fullName: formData.fullName,
+          jobTitle: formData.desiredJobTitle || formData.jobTitle, // Use desiredJobTitle if available, fallback to jobTitle
+          email: formData.email,
+          phone: formData.phone,
+          location: formData.location,
+          summary: formData.summary
+        },
+        // Education
         education: formData.education.map(edu => ({
           institution: edu.institution,
           degree: edu.degree,
@@ -202,6 +248,7 @@ const EditProfile = () => {
           endDate: edu.endDate,
           description: edu.description
         })),
+        // Experience
         experience: formData.experience.map(exp => ({
           company: exp.company,
           position: exp.position,
@@ -211,6 +258,7 @@ const EditProfile = () => {
           current: exp.current,
           description: exp.description
         })),
+        // Certifications
         certifications: formData.certifications.map(cert => ({
           name: cert.name,
           organization: cert.organization,
@@ -218,7 +266,20 @@ const EditProfile = () => {
           expiryDate: cert.expiryDate,
           credentialID: cert.credentialID,
           description: cert.description
-        }))
+        })),
+        // Skills
+        skills: formData.skills,
+        // Job preferences
+        jobPreferences: {
+          desiredJobTitle: formData.desiredJobTitle,
+          jobType: formData.jobType,
+          workEnvironment: formData.workEnvironment,
+          salaryMin: formData.salaryMin,
+          salaryMax: formData.salaryMax,
+          availability: formData.availability
+        },
+        // Metadata
+        lastUpdated: new Date()
       }, { merge: true });
       setNotification({ open: true, message: "Profile updated successfully!", severity: "success" })
     } catch (error) {
@@ -688,6 +749,155 @@ const EditProfile = () => {
     </Box>
   )
 
+  const SkillsSection = (
+    <Box>
+      <SectionTitle>Skills</SectionTitle>
+      <Box sx={{ mb: 2 }}>
+        <Box display="flex" flexWrap="wrap" gap={1} mb={2}>
+          {formData.skills.map((skill, index) => (
+            <Chip
+              key={index}
+              label={skill}
+              onDelete={() => {
+                const newSkills = formData.skills.filter((_, i) => i !== index);
+                updateForm("skills", newSkills);
+              }}
+              sx={{
+                backgroundColor: "#00A389",
+                color: "white",
+                "& .MuiChip-deleteIcon": {
+                  color: "white"
+                }
+              }}
+            />
+          ))}
+        </Box>
+        <Box display="flex" gap={2}>
+          <InputField
+            fullWidth
+            label="Add a skill"
+            placeholder="e.g., JavaScript, Project Management"
+            value={formData.currentSkill || ""}
+            onChange={e => updateForm("currentSkill", e.target.value)}
+            onKeyPress={e => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                if (formData.currentSkill?.trim()) {
+                  const newSkills = [...formData.skills, formData.currentSkill.trim()];
+                  updateForm("skills", newSkills);
+                  updateForm("currentSkill", "");
+                }
+              }
+            }}
+          />
+          <Button
+            variant="contained"
+            onClick={() => {
+              if (formData.currentSkill?.trim()) {
+                const newSkills = [...formData.skills, formData.currentSkill.trim()];
+                updateForm("skills", newSkills);
+                updateForm("currentSkill", "");
+              }
+            }}
+            disabled={!formData.currentSkill?.trim()}
+            sx={{ backgroundColor: "#00A389", "&:hover": { backgroundColor: "#00897B" } }}
+          >
+            Add
+          </Button>
+        </Box>
+      </Box>
+    </Box>
+  )
+
+  const JobPreferencesSection = (
+    <Box>
+      <SectionTitle>Job Preferences</SectionTitle>
+      <Grid container spacing={3}>
+        <Grid item xs={12} md={6} width={"49%"}>
+          <InputField
+            fullWidth
+            label="Desired Job Title"
+            placeholder="Software Engineer, Project Manager, etc."
+            value={formData.desiredJobTitle}
+            onChange={e => updateForm("desiredJobTitle", e.target.value.slice(0, MAX_FIELD_LENGTH))}
+            inputProps={{
+              maxLength: MAX_FIELD_LENGTH,
+              style: { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }
+            }}
+          />
+        </Grid>
+        <Grid item xs={12} md={6} width={"48%"}>
+          <FormControl fullWidth>
+            <InputLabel sx={{ color: "rgba(255, 255, 255, 0.7)" }}>Job Type</InputLabel>
+            <Select
+              value={formData.jobType}
+              onChange={e => updateForm("jobType", e.target.value)}
+              sx={{ color: "white" }}
+            >
+              <MenuItem value="">Select Job Type</MenuItem>
+              <MenuItem value="Full-time">Full-time</MenuItem>
+              <MenuItem value="Part-time">Part-time</MenuItem>
+              <MenuItem value="Contract">Contract</MenuItem>
+              <MenuItem value="Freelance">Freelance</MenuItem>
+              <MenuItem value="Internship">Internship</MenuItem>
+            </Select>
+          </FormControl>
+        </Grid>
+        <Grid item xs={12} md={6} width={"49%"}>
+          <FormControl fullWidth>
+            <InputLabel sx={{ color: "rgba(255, 255, 255, 0.7)" }}>Work Environment</InputLabel>
+            <Select
+              value={formData.workEnvironment}
+              onChange={e => updateForm("workEnvironment", e.target.value)}
+              sx={{ color: "white" }}
+            >
+              <MenuItem value="">Select Work Environment</MenuItem>
+              <MenuItem value="On-site">On-site</MenuItem>
+              <MenuItem value="Remote">Remote</MenuItem>
+              <MenuItem value="Hybrid">Hybrid</MenuItem>
+            </Select>
+          </FormControl>
+        </Grid>
+        <Grid item xs={12} md={6} width={"48%"}>
+          <FormControl fullWidth>
+            <InputLabel sx={{ color: "rgba(255, 255, 255, 0.7)" }}>Availability</InputLabel>
+            <Select
+              value={formData.availability}
+              onChange={e => updateForm("availability", e.target.value)}
+              sx={{ color: "white" }}
+            >
+              <MenuItem value="">Select Availability</MenuItem>
+              <MenuItem value="Immediately">Immediately</MenuItem>
+              <MenuItem value="2 weeks">2 weeks</MenuItem>
+              <MenuItem value="1 month">1 month</MenuItem>
+              <MenuItem value="More than 1 month">More than 1 month</MenuItem>
+            </Select>
+          </FormControl>
+        </Grid>
+        <Grid item xs={12} md={6} width={"49%"}>
+          <InputField
+            fullWidth
+            label="Minimum Salary"
+            placeholder="50000"
+            type="number"
+            value={formData.salaryMin}
+            onChange={e => updateForm("salaryMin", e.target.value)}
+          />
+        </Grid>
+        <Grid item xs={12} md={6} width={"48%"}>
+          <InputField
+            fullWidth
+            label="Maximum Salary"
+            placeholder="80000"
+            type="number"
+            value={formData.salaryMax}
+            onChange={e => updateForm("salaryMax", e.target.value)}
+          />
+        </Grid>
+      </Grid>
+    </Box>
+  )
+
    return (
     <>
       <Navbar/>
@@ -705,6 +915,10 @@ const EditProfile = () => {
             {ExperienceSection}
             <SectionDivider />
             {CertificationsSection}
+            <SectionDivider />
+            {SkillsSection}
+            <SectionDivider />
+            {JobPreferencesSection}
             <SectionDivider />
             <RegisterButton type="submit" variant="contained" disabled={isLoading}>
               {isLoading ? "Updating..." : "Save Changes"}

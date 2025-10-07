@@ -5,6 +5,7 @@ import Login from "./Page/Login";
 import Signup from "./Page/SignUp";
 import DashboardPage from "./Page/Dashboard";
 import EditProfile from "./Page/EditUser";
+import Profile from "./Page/Profile";
 import Resume from "./Page/Resume/Dashboard";
 import EditResume from "./Page/Resume/edit-resume/[resume_id]/EditResume";
 import ViewResume from "./Page/Resume/view-resume/[resume_id]/ViewResume";
@@ -37,6 +38,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <DashboardPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/profile"
+            element={
+              <ProtectedRoute>
+                <Profile />
               </ProtectedRoute>
             }
           />

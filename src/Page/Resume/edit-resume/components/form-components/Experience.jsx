@@ -13,7 +13,7 @@ import {
 import { Add, Delete } from "@mui/icons-material";
 import RichTextEditor from "../../../../../components/RichTextEditor";
 import { useDispatch } from "react-redux";
-import { addResumeData } from "../../../../../features/resume/resumeFeatures";
+import { setResumeData } from "../../../../../features/resume/resumeFeatures";
 import { useParams } from "react-router-dom";
 import { updateThisResume } from "../../../../../Services/resumeAPI";
 import { toast } from "sonner";
@@ -59,11 +59,13 @@ function Experience({ resumeInfo }) {
     );
   }, [experienceList]);
 
-  // Sync with Redux
-  useEffect(() => {
-    dispatch(addResumeData({ ...resumeInfo, experience: experienceList }));
-    // eslint-disable-next-line
-  }, [experienceList]);
+  // Temporarily disable Redux updates to prevent infinite loop
+  // TODO: Re-enable after fixing the loop issue
+  // useEffect(() => {
+  //   if (resumeInfo && experienceList) {
+  //     dispatch(setResumeData({ ...resumeInfo, experience: experienceList }));
+  //   }
+  // }, [experienceList, dispatch]);
 
   const addExperience = () => {
     setExperienceList([...experienceList, { ...formFields }]);

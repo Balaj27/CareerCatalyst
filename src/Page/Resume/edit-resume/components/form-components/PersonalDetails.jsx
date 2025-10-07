@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useDispatch } from "react-redux";
-import { addResumeData } from "../../../../../features/resume/resumeFeatures";
+import { setResumeData } from "../../../../../features/resume/resumeFeatures";
 import {
   Box,
   Grid,
@@ -40,12 +40,18 @@ function PersonalDetails({ resumeInfo }) {
   });
   const [hasAutoFilled, setHasAutoFilled] = useState(false);
 
-  // Auto-fill only ONCE when resumeInfo.personal is available
+  // Auto-fill when resumeInfo.personal is available - only run once when data is first loaded
   useEffect(() => {
+    console.log("PersonalDetails useEffect - resumeInfo:", resumeInfo); // Debug log
+    console.log("PersonalDetails useEffect - resumeInfo.personal:", resumeInfo?.personal); // Debug log
+    console.log("PersonalDetails useEffect - current formData:", formData); // Debug log
+    console.log("PersonalDetails useEffect - hasAutoFilled:", hasAutoFilled); // Debug log
+    
+    // Only auto-fill if we haven't already done it and we have data
     if (
+      !hasAutoFilled &&
       resumeInfo &&
       resumeInfo.personal &&
-      !hasAutoFilled &&
       (
         resumeInfo.personal.firstName ||
         resumeInfo.personal.lastName ||
@@ -55,17 +61,24 @@ function PersonalDetails({ resumeInfo }) {
         resumeInfo.personal.email
       )
     ) {
-      setFormData({
+      console.log("Auto-filling form with data:", resumeInfo.personal); // Debug log
+      const newFormData = {
         firstName: resumeInfo.personal.firstName || "",
         lastName: resumeInfo.personal.lastName || "",
         jobTitle: resumeInfo.personal.jobTitle || "",
         address: resumeInfo.personal.address || "",
         phone: resumeInfo.personal.phone || "",
         email: resumeInfo.personal.email || "",
-      });
+      };
+      console.log("Setting form data to:", newFormData); // Debug log
+      setFormData(newFormData);
       setHasAutoFilled(true);
+    } else if (!hasAutoFilled) {
+      console.log("No personal data found or data is empty"); // Debug log
+    } else {
+      console.log("Already auto-filled, skipping..."); // Debug log
     }
-  }, [resumeInfo, hasAutoFilled]);
+  }, [resumeInfo?.personal?.firstName, resumeInfo?.personal?.lastName, resumeInfo?.personal?.jobTitle, resumeInfo?.personal?.address, resumeInfo?.personal?.phone, resumeInfo?.personal?.email, hasAutoFilled]); // Only depend on specific fields
 
   const isFormValid =
     (formData.firstName || "").trim() &&
@@ -74,18 +87,25 @@ function PersonalDetails({ resumeInfo }) {
     (formData.phone || "").trim() &&
     (formData.email || "").trim();
 
+  // Debug log for form data
+  console.log("PersonalDetails render - formData:", formData);
+
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setFormData((prev) => ({
       ...prev,
       [name]: value,
     }));
-    dispatch(
-      addResumeData({
-        ...resumeInfo,
-        personal: { ...resumeInfo.personal, [name]: value },
-      })
-    );
+    // Temporarily disable Redux updates to prevent infinite loop
+    // TODO: Re-enable after fixing the loop issue
+    // if (resumeInfo) {
+    //   dispatch(
+    //     setResumeData({
+    //       ...resumeInfo,
+    //       personal: { ...resumeInfo.personal, [name]: value },
+    //     })
+    //   );
+    // }
   };
 
   const onSave = async (e) => {

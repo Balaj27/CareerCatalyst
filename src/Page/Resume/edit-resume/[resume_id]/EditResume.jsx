@@ -4,7 +4,7 @@ import PreviewPage from "../components/PreviewPage";
 import { useParams } from "react-router-dom";
 import { getResumeData } from "../../../../Services/resumeAPI";
 import { useDispatch, useSelector } from "react-redux";
-import { addResumeData } from "../../../../features/resume/resumeFeatures";
+import { setResumeId, setResumeData } from "../../../../features/resume/resumeFeatures";
 import { Box } from "@mui/material";
 import Navbar from "../../../../components/landing-page/Navbar";
 
@@ -14,20 +14,22 @@ export function EditResume() {
   const resumeInfo = useSelector((state) => state.editResume.resumeData);
 
   useEffect(() => {
-    // Only fetch if Redux doesn't have data or has the wrong resume loaded
-    if (
-      resume_id &&
-      (!resumeInfo || !resumeInfo.id || resumeInfo.id !== resume_id)
-    ) {
+    // Always fetch data on component mount to ensure fresh data
+    if (resume_id) {
+      dispatch(setResumeId(resume_id));
       getResumeData(resume_id)
         .then((data) => {
-          dispatch(addResumeData(data));
+          if (data) {
+            console.log("Loaded resume data:", data); // Debug log
+            dispatch(setResumeData(data));
+          }
         })
         .catch(err => {
+          console.error("Error fetching resume data:", err);
           // Optionally show a toast or redirect
         });
     }
-  }, [resume_id, dispatch, resumeInfo]);
+  }, [resume_id, dispatch]);
 
   return (
     <>

@@ -299,8 +299,8 @@ export default function Navbar() {
                         open={Boolean(anchorEl)}
                         onClose={handleMenuClose}
                       >
-                        <MenuItem onClick={handleMenuClose} component={Link} to="/edit-profile">
-                          Profile Settings
+                        <MenuItem onClick={handleMenuClose} component={Link} to="/profile">
+                          My Profile
                         </MenuItem>
                         <MenuItem onClick={handleLogout}>
                           Logout

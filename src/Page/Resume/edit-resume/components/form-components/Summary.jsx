@@ -10,7 +10,7 @@ import {
 } from "@mui/material";
 import { Sparkles } from "lucide-react";
 import { useDispatch } from "react-redux";
-import { addResumeData } from "../../../../../features/resume/resumeFeatures";
+import { setResumeData } from "../../../../../features/resume/resumeFeatures";
 import { useParams } from "react-router-dom";
 import { toast } from "sonner";
 import { AIChatSession } from "../../../../../Services/AiModel";
@@ -24,7 +24,30 @@ const lightGreen = "#2D6F5B";
 const white = "#fff";
 const borderRadius = "16px";
 
-const prompt = `Job Title: {jobTitle} , Depends on job title give me list of summary for 3 experience level, Mid Level and Fresher level in 3-4 lines in array format, With summary and experience_level Field in JSON Format`;
+const prompt = `Generate professional summaries for the job title: "{jobTitle}"
+
+Create 3 different summaries for different experience levels:
+1. Entry Level (0-2 years experience)
+2. Mid Level (3-7 years experience) 
+3. Senior Level (8+ years experience)
+
+Each summary should be 3-4 lines and highlight relevant skills, achievements, and career focus for that experience level.
+
+Return ONLY a valid JSON array in this exact format:
+[
+  {
+    "summary": "Professional summary text here...",
+    "experience_level": "Entry Level"
+  },
+  {
+    "summary": "Professional summary text here...",
+    "experience_level": "Mid Level"
+  },
+  {
+    "summary": "Professional summary text here...",
+    "experience_level": "Senior Level"
+  }
+]`;
 
 function Summary({ resumeInfo }) {
   const dispatch = useDispatch();
@@ -43,7 +66,11 @@ function Summary({ resumeInfo }) {
   const handleInputChange = (e) => {
     const value = e.target.value;
     setSummary(value);
-    dispatch(addResumeData({ ...resumeInfo, summary: value }));
+    // Temporarily disable Redux updates to prevent infinite loop
+    // TODO: Re-enable after fixing the loop issue
+    // if (resumeInfo) {
+    //   dispatch(setResumeData({ ...resumeInfo, summary: value }));
+    // }
   };
 
   const onSave = async (e) => {
@@ -70,56 +97,84 @@ function Summary({ resumeInfo }) {
 
   const setSummery = (summaryText) => {
     setSummary(summaryText);
-    dispatch(addResumeData({ ...resumeInfo, summary: summaryText }));
+    // Temporarily disable Redux updates to prevent infinite loop
+    // TODO: Re-enable after fixing the loop issue
+    // if (resumeInfo) {
+    //   dispatch(setResumeData({ ...resumeInfo, summary: summaryText }));
+    // }
   };
 
   const generateSummaryFromAI = async () => {
     setLoading(true);
     setAiGenerateSummaryList([]); // clear old state
-    if (!resumeInfo?.personal?.jobTitle) {
+    
+    const jobTitle = resumeInfo?.personal?.jobTitle || resumeInfo?.jobTitle;
+    if (!jobTitle) {
       toast("Please Add Job Title", { type: "warning" });
       setLoading(false);
       return;
     }
-    const PROMPT = prompt.replace("{jobTitle}", resumeInfo.personal.jobTitle);
+    
+    const PROMPT = prompt.replace("{jobTitle}", jobTitle);
     try {
       const result = await AIChatSession.sendMessage(PROMPT);
 
-      let text =
-        typeof result.response.text === "function"
-          ? await result.response.text()
-          : result.response.text;
+      let text = "";
+      if (typeof result?.response?.text === "function") {
+        text = await result.response.text();
+      } else if (typeof result?.response?.text === "string") {
+        text = result.response.text;
+      } else if (typeof result?.text === "function") {
+        text = await result.text();
+      } else if (typeof result?.text === "string") {
+        text = result.text;
+      } else {
+        text = result?.response || result || "";
+      }
 
-      // Remove code blocks if present
+      console.log("AI Response:", text); // Debug log
+
+      // Clean the response
       if (typeof text === "string") {
-        text = text.replace(/```json|```/g, "").trim();
+        // Remove markdown code blocks
+        text = text.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
+        
+        // Extract JSON from response if wrapped in other text
+        const jsonMatch = text.match(/\[[\s\S]*\]/);
+        if (jsonMatch) {
+          text = jsonMatch[0];
+        }
       }
 
       let parsed;
       try {
         parsed = JSON.parse(text);
+        console.log("Parsed AI Response:", parsed); // Debug log
       } catch (err) {
-        toast("AI did not return a valid JSON.", { type: "warning" });
+        console.error("JSON Parse Error:", err, "Text:", text);
+        toast("AI did not return valid JSON. Please try again.", { type: "warning" });
         setAiGenerateSummaryList([]);
         setLoading(false);
         return;
       }
 
-      // Accepts either an array or an object with summaries array:
+      // Handle different response formats
       if (Array.isArray(parsed)) {
         setAiGenerateSummaryList(parsed);
+        toast("Summary Generated Successfully", { type: "success" });
       } else if (parsed && Array.isArray(parsed.summaries)) {
         setAiGenerateSummaryList(parsed.summaries);
+        toast("Summary Generated Successfully", { type: "success" });
       } else if (parsed && parsed.summary && parsed.experience_level) {
         // Single summary object
         setAiGenerateSummaryList([parsed]);
+        toast("Summary Generated Successfully", { type: "success" });
       } else {
         setAiGenerateSummaryList([]);
-        toast("AI did not return a valid summary list.", { type: "warning" });
+        toast("AI did not return a valid summary format.", { type: "warning" });
       }
-      toast("Summary Generated", { type: "success" });
     } catch (error) {
-      console.error(error);
+      console.error("AI Generation Error:", error);
       toast("Failed to generate summary", {
         description: error.message || "Error processing AI response",
       });

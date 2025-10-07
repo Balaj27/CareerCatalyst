@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import {
@@ -20,8 +20,9 @@ import Education from "./form-components/Education";
 import Skills from "./form-components/Skills";
 import Project from "./form-components/Project";
 import ThemeColor from "./ThemeColor";
-import { setResumeId, setResumeData } from "../../../../store";
+import { setResumeId, setResumeData } from "../../../../features/resume/resumeFeatures";
 import { getResumeData, createNewResume } from "../../../../Services/resumeAPI";
+import { getUserProfileData, convertProfileToResumeData } from "../../../../Services/userProfileAPI";
 
 // Custom colors based on the image
 const mainGreen = "linear-gradient(90deg, #16382C 0%, #225144 100%)";
@@ -43,29 +44,91 @@ function ResumeForm() {
   const { resumeId, resume_id } = useParams();
   const navigate = useNavigate();
 
+  // Debug logging
+  console.log("ResumeForm render - resumeInfo:", resumeInfo);
+  console.log("ResumeForm render - resumeIdFromStore:", resumeIdFromStore);
+
+  // Debug function to test profile loading
+  const testProfileLoading = async () => {
+    try {
+      console.log("Testing profile loading...");
+      const profileData = await getUserProfileData();
+      console.log("Profile data loaded:", profileData);
+      const resumeData = convertProfileToResumeData(profileData);
+      console.log("Converted resume data:", resumeData);
+      console.log("Dispatching setResumeData with:", resumeData);
+      dispatch(setResumeData(resumeData));
+      console.log("setResumeData dispatched");
+    } catch (error) {
+      console.error("Error in test profile loading:", error);
+    }
+  };
+
   // Only one section open at a time (default: first section)
   const [expanded, setExpanded] = useState("personal");
   const isMobile = useMediaQuery("(max-width:600px)");
 
+  // Use useRef to track if we've already loaded data
+  const hasLoadedRef = useRef(false);
+
   useEffect(() => {
     const id = resumeId || resume_id;
+    console.log("ResumeForm useEffect - ID:", id, "resumeIdFromStore:", resumeIdFromStore, "hasLoaded:", hasLoadedRef.current);
+    
+    // Prevent multiple loads
+    if (hasLoadedRef.current) {
+      console.log("Already loaded data, skipping...");
+      return;
+    }
+    
     if (isValidResumeId(id)) {
+      console.log("Loading existing resume:", id);
+      hasLoadedRef.current = true;
       dispatch(setResumeId(id));
       getResumeData(id).then(data => {
+        console.log("Loaded resume data:", data);
         if (data) dispatch(setResumeData(data));
       })
       .catch(err => {
-        // Optionally handle fetch error here (show toast, etc)
+        console.error("Error loading resume:", err);
+        hasLoadedRef.current = false; // Reset on error
       });
     } else if (!resumeIdFromStore) {
-      createNewResume({}).then(newResume => {
-        if (isValidResumeId(newResume?.id)) {
-          dispatch(setResumeId(newResume.id));
-          dispatch(setResumeData(newResume));
+      console.log("Creating new resume with profile data");
+      hasLoadedRef.current = true;
+      // Create new resume with user profile data auto-filled
+      const createResumeWithProfileData = async () => {
+        try {
+          // Get user profile data
+          const profileData = await getUserProfileData();
+          console.log("Profile data loaded:", profileData);
+          const resumeData = convertProfileToResumeData(profileData);
+          console.log("Converted resume data:", resumeData);
+          
+          // Create new resume with profile data
+          const newResume = await createNewResume(resumeData);
+          console.log("Created new resume:", newResume);
+          if (isValidResumeId(newResume?.id)) {
+            dispatch(setResumeId(newResume.id));
+            dispatch(setResumeData(newResume));
+          }
+        } catch (error) {
+          console.error("Error loading profile data:", error);
+          hasLoadedRef.current = false; // Reset on error
+          // Fallback to empty resume if profile loading fails
+          createNewResume({}).then(newResume => {
+            console.log("Created fallback resume:", newResume);
+            if (isValidResumeId(newResume?.id)) {
+              dispatch(setResumeId(newResume.id));
+              dispatch(setResumeData(newResume));
+            }
+          });
         }
-      });
+      };
+      
+      createResumeWithProfileData();
     }
-  }, [resumeId, resume_id, resumeIdFromStore, dispatch]);
+  }, [resumeId, resume_id, resumeIdFromStore]);
 
   const handleAccordionChange = (panel) => (event, isExpanded) => {
     setExpanded(isExpanded ? panel : false);
@@ -123,7 +186,25 @@ function ResumeForm() {
           <ThemeColor resumeInfo={resumeInfo} />
         </Stack>
         <Stack direction="row" spacing={2}>
-
+          {/* Debug button - remove in production */}
+          <Button
+            variant="outlined"
+            sx={{
+              borderColor: lightGreen,
+              color: lightGreen,
+              borderRadius: "8px",
+              px: 2,
+              fontWeight: 700,
+              "&:hover": { 
+                borderColor: midGreen,
+                backgroundColor: "rgba(45, 111, 91, 0.1)"
+              },
+              textTransform: "none"
+            }}
+            onClick={testProfileLoading}
+          >
+            Test Profile Load
+          </Button>
           <Button
             variant="contained"
             sx={{
