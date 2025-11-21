@@ -15,7 +15,7 @@ import {
 } from "@mui/material";
 import { Add, Delete } from "@mui/icons-material";
 import { useDispatch } from "react-redux";
-import { setResumeData } from "../../../../../features/resume/resumeFeatures";
+import { addResumeData } from "../../../../../features/resume/resumeFeatures";
 import { useParams } from "react-router-dom";
 import { updateThisResume } from "../../../../../Services/resumeAPI";
 import { toast } from "sonner";
@@ -69,13 +69,10 @@ function Education({ resumeInfo }) {
     );
   }, [resumeInfo?.education]);
 
-  // Temporarily disable Redux updates to prevent infinite loop
-  // TODO: Re-enable after fixing the loop issue
-  // useEffect(() => {
-  //   if (resumeInfo && educationList) {
-  //     dispatch(setResumeData({ ...resumeInfo, education: educationList }));
-  //   }
-  // }, [educationList, dispatch]);
+  // Sync Redux
+  useEffect(() => {
+    dispatch(addResumeData({ ...resumeInfo, education: educationList }));
+  }, [educationList]);
 
   const addEducation = () => {
     setEducationList([...educationList, { ...formFields }]);

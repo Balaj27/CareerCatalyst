@@ -71,12 +71,15 @@ export const getAllResumeData = async () => {
   });
 };
 
-// Get a single resume by its document ID
-export const getResumeData = async (resumeID) => {
+// Get a single resume by its document ID and optional userId
+export const getResumeData = async (resumeID, userId) => {
   if (!resumeID) throw new Error("resumeID is required.");
-  const userId = getAuth().currentUser?.uid;
-  if (!userId) throw new Error("User not authenticated.");
-  const docRef = doc(db, "employees", userId, "resumes", resumeID);
+  let targetUserId = userId;
+  if (!targetUserId) {
+    targetUserId = getAuth().currentUser?.uid;
+    if (!targetUserId) throw new Error("User not authenticated.");
+  }
+  const docRef = doc(db, "employees", targetUserId, "resumes", resumeID);
   const docSnap = await getDoc(docRef);
   if (docSnap.exists()) {
     const data = docSnap.data();

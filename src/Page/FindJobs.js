@@ -1,4 +1,11 @@
 import { useState, useEffect } from "react"
+import { db } from "../lib/firebase"
+import { collection, getDocs } from "firebase/firestore"
+import { useAuth } from "../lib/auth-context"
+// import { getAllResumeData } from "../app/services/ResumeAPI"
+import { submitApplication, getApplicationsForUser } from "../lib/firestore-application"
+import { sendCandidateEmail } from "../Services/sendCandidateEmail";
+import { getAllResumeData } from "../Services/resumeAPI"
 import {
   Box,
   Typography,
@@ -54,6 +61,7 @@ import MyLocationIcon from "@mui/icons-material/MyLocation"
 // Import components
 import Footer from "../components/Footer"
 import Navbar from "../components/landing-page/Navbar"
+
 
 // Animation keyframes
 const fadeInKeyframes = `
@@ -582,392 +590,266 @@ const CancelButton = styled(Button)({
 })
 
 const FindJobs = () => {
-  // State for search inputs
-  const [jobTitle, setJobTitle] = useState("")
-  const [location, setLocation] = useState("")
+            // Add missing handler functions for location dialog and selection
+            const handleLocationClick = () => {
+              setIsLocationDialogOpen(true);
+            };
 
-  // State for filters - No filters applied by default
-  const [selectedJobTypes, setSelectedJobTypes] = useState([])
-  const [selectedCategories, setSelectedCategories] = useState([])
-  const [salaryRange, setSalaryRange] = useState([0, 10]) // Full range
-  const [showCategoriesFilter, setShowCategoriesFilter] = useState(true)
+            const handleLocationDialogClose = () => {
+              setIsLocationDialogOpen(false);
+            };
 
-  // State for sorting
-  const [sortBy, setSortBy] = useState("Most recent")
+            const handleLocationSelect = (selectedLocation) => {
+              setLocation(selectedLocation);
+              setIsLocationDialogOpen(false);
+            };
 
-  // State for expanded jobs
-  const [expanded, setExpanded] = useState(false)
-  const [fadeIn, setFadeIn] = useState(false)
+            const getCurrentLocation = () => {
+              setIsGettingLocation(true);
+              setNearbyLocations([]);
 
-  // State for location dialog
-  const [isLocationDialogOpen, setIsLocationDialogOpen] = useState(false)
-  const [isGettingLocation, setIsGettingLocation] = useState(false)
-  const [nearbyLocations, setNearbyLocations] = useState([])
-
-  // Popular locations
-  const popularLocations = [
-    "Islamabad, Pakistan",
-    "Lahore, Pakistan",
-    "Karachi, Pakistan",
-    "New York, USA",
-    "London, UK",
-    "Toronto, Canada",
-    "Sydney, Australia",
-  ]
-
-  // Hero Section Functions
-  const handleLocationClick = () => {
-    setIsLocationDialogOpen(true)
-  }
-
-  const handleLocationDialogClose = () => {
-    setIsLocationDialogOpen(false)
-  }
-
-  const handleLocationSelect = (selectedLocation) => {
-    setLocation(selectedLocation)
-    setIsLocationDialogOpen(false)
-  }
-
-  const getNearbyLocations = async (latitude, longitude) => {
-    try {
-      // Get the main location
-      const response = await fetch(
-        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=10`,
-      )
-      const data = await response.json()
-
-      let mainLocation = "Unknown Location"
-      if (data.address) {
-        const city = data.address.city || data.address.town || data.address.village || data.address.county
-        const country = data.address.country
-        if (city && country) {
-          mainLocation = `${city}, ${country}`
-        }
-      }
-
-      // Set the main location
-      setLocation(mainLocation)
-
-      // Get nearby locations
-      const nearbyResponse = await fetch(
-        `https://nominatim.openstreetmap.org/search?format=json&q=cities+near&lat=${latitude}&lon=${longitude}&addressdetails=1&limit=5`,
-      )
-      const nearbyData = await nearbyResponse.json()
-
-      const locations = nearbyData
-        .map((item) => {
-          const city = item.address?.city || item.address?.town || item.address?.village || item.address?.county
-          const country = item.address?.country
-          if (city && country) {
-            return `${city}, ${country}`
+              if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                  (position) => {
+                    const { latitude, longitude } = position.coords;
+                    // Dummy: just set a string for now
+                    setLocation(`Lat: ${latitude}, Lon: ${longitude}`);
+                    setIsGettingLocation(false);
+                  },
+                  (error) => {
+                    setLocation("Location access denied");
+                    setIsGettingLocation(false);
+                  }
+                );
+              } else {
+                setLocation("Geolocation not supported");
+                setIsGettingLocation(false);
+              }
+            };
+        // Add missing state for filters, sorting, and location
+        const [selectedJobTypes, setSelectedJobTypes] = useState([]);
+        const [selectedCategories, setSelectedCategories] = useState([]);
+        const [salaryRange, setSalaryRange] = useState([0, 10]);
+        const [sortBy, setSortBy] = useState("Most recent");
+        const [jobTitle, setJobTitle] = useState("");
+        const [location, setLocation] = useState("");
+        const [showCategoriesFilter, setShowCategoriesFilter] = useState(true);
+        const [expanded, setExpanded] = useState(false);
+        const [fadeIn, setFadeIn] = useState(false);
+        const [isLocationDialogOpen, setIsLocationDialogOpen] = useState(false);
+        const [isGettingLocation, setIsGettingLocation] = useState(false);
+        const [nearbyLocations, setNearbyLocations] = useState([]);
+        const popularLocations = [
+          "Islamabad, Pakistan",
+          "Lahore, Pakistan",
+          "Karachi, Pakistan",
+          "New York, USA",
+          "London, UK",
+          "Toronto, Canada",
+          "Sydney, Australia",
+        ];
+    // --- Application Dialog State and Logic ---
+    const { currentUser } = useAuth();
+    const [isApplyDialogOpen, setIsApplyDialogOpen] = useState(false);
+    const [applyJob, setApplyJob] = useState(null);
+    const [coverLetter, setCoverLetter] = useState("");
+    const [applying, setApplying] = useState(false);
+    const [applyError, setApplyError] = useState("");
+    const [email, setEmail] = useState("");
+    const [phone, setPhone] = useState("");
+    const [userApplications, setUserApplications] = useState([]);
+    const [alreadyApplied, setAlreadyApplied] = useState(false);
+    const [resumes, setResumes] = useState([]);
+    const [selectedResumeId, setSelectedResumeId] = useState("");
+        // Fetch user resumes when dialog opens
+        useEffect(() => {
+          const fetchResumes = async () => {
+            if (currentUser?.uid && isApplyDialogOpen) {
+              try {
+                const userResumes = await getAllResumeData();
+                console.log('[FindJobs] Resumes fetched:', userResumes);
+                setResumes(userResumes);
+              } catch (err) {
+                console.error('[FindJobs] Error fetching resumes:', err);
+                setResumes([]);
+              }
+            } else {
+              setResumes([]);
+            }
+          };
+          fetchResumes();
+        }, [currentUser, isApplyDialogOpen]);
+    // Fetch user's applications on mount or when user changes
+    useEffect(() => {
+      const fetchUserApplications = async () => {
+        if (currentUser?.uid) {
+          try {
+            const apps = await getApplicationsForUser(currentUser.uid);
+            setUserApplications(apps);
+          } catch {
+            setUserApplications([]);
           }
-          return null
-        })
-        .filter(Boolean)
-        .filter((loc) => loc !== mainLocation) // Remove the main location from nearby
+        } else {
+          setUserApplications([]);
+        }
+      };
+      fetchUserApplications();
+    }, [currentUser]);
 
-      setNearbyLocations(locations)
-    } catch (error) {
-      console.error("Error getting location data:", error)
-      setNearbyLocations([])
-    }
-  }
+    const handleOpenApplyDialog = async (job) => {
+      setApplyJob(job);
+      setIsApplyDialogOpen(true);
+      setCoverLetter("");
+      setApplyError("");
+      setEmail("");
+      setPhone("");
+      setSelectedResumeId("");
+      // Check if user already applied to this job
+      if (currentUser) {
+        try {
+          const { getUserProfileData } = await import("../Services/userProfileAPI");
+          const profile = await getUserProfileData();
+          setEmail(profile.email || "");
+          setPhone(profile.phone || "");
+        } catch (err) {
+          setEmail("");
+          setPhone("");
+        }
+        // Check if already applied
+        const hasApplied = userApplications.some(app => app.jobId === job.id);
+        setAlreadyApplied(hasApplied);
+      } else {
+        setAlreadyApplied(false);
+      }
+    };
 
-  const getCurrentLocation = () => {
-    setIsGettingLocation(true)
-    setNearbyLocations([])
+    const handleCloseApplyDialog = () => {
+      setIsApplyDialogOpen(false);
+      setApplyJob(null);
+      setCoverLetter("");
+      setApplyError("");
+      setEmail("");
+      setPhone("");
+    };
 
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          const { latitude, longitude } = position.coords
-          getNearbyLocations(latitude, longitude).finally(() => {
-            setIsGettingLocation(false)
-          })
-        },
-        (error) => {
-          console.error("Error getting location:", error)
-          setLocation("Location access denied")
-          setIsGettingLocation(false)
-        },
-      )
-    } else {
-      setLocation("Geolocation not supported")
-      setIsGettingLocation(false)
-    }
-  }
+    const handleSubmitApplication = async () => {
+      setApplying(true);
+      setApplyError("");
+      if (alreadyApplied) {
+        setApplyError("You have already applied to this job.");
+        setApplying(false);
+        return;
+      }
+      if (!coverLetter || !email || !phone) {
+        setApplyError("All fields are required.");
+        setApplying(false);
+        return;
+      }
+      if (!selectedResumeId) {
+        setApplyError("Please select a resume to submit.");
+        setApplying(false);
+        return;
+      }
+      try {
+        await submitApplication({
+          jobId: applyJob.id,
+          userId: currentUser.uid,
+          coverLetter,
+          email,
+          phone,
+          resumeId: selectedResumeId,
+        });
+        // Send confirmation email to applicant
+        await sendCandidateEmail({
+          to: email,
+          subject: `Application Received for ${applyJob.title || "the job"}`,
+          body: `Thank you for applying for the position of <b>${applyJob.title || "the job"}</b> at <b>${applyJob.company || "the company"}</b>.<br><br>Your application has been received. Our team will review your profile and contact you if you are shortlisted.`,
+          company: applyJob.company || "Company",
+          jobTitle: applyJob.title || "Job Title",
+          candidateName: currentUser.displayName || email,
+        });
+        setIsApplyDialogOpen(false);
+        setApplyJob(null);
+        setCoverLetter("");
+        setApplyError("");
+        setEmail("");
+        setPhone("");
+        setSelectedResumeId("");
+        // Refresh user applications
+        const apps = await getApplicationsForUser(currentUser.uid);
+        setUserApplications(apps);
+      } catch (err) {
+        setApplyError("Failed to submit application. Please try again.");
+      } finally {
+        setApplying(false);
+      }
+    };
+            <Box>
+              <TextField
+                label="Email"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                fullWidth
+                margin="normal"
+                required
+                type="email"
+              />
+              <TextField
+                label="Phone Number"
+                value={phone}
+                onChange={e => setPhone(e.target.value)}
+                fullWidth
+                margin="normal"
+                required
+                type="tel"
+              />
+              <TextField
+                label="Cover Letter"
+                value={coverLetter}
+                onChange={e => setCoverLetter(e.target.value)}
+                fullWidth
+                multiline
+                minRows={3}
+                margin="normal"
+                required
+              />
+              {applyError && <Typography color="error" mt={1}>{applyError}</Typography>}
+            </Box>
+  // Hero Section Functions removed (location, filters, etc.)
 
-  // All jobs data (9 jobs total - 6 initial + 3 more)
-  const allJobs = [
-    {
-      title: "Visual Designer",
-      company: "Facebook",
-      location: "Remote",
-      type: "Full-Time",
-      applicants: "10 Applied",
-      capacity: "30 Capacity",
-      salary: "$2000/month",
-      logo: <FacebookIcon />,
-      color: "#1877F2", // Facebook blue
-      categories: ["Design & Development"],
-      jobType: "Full Time",
-    },
-    {
-      title: "Product Designer",
-      company: "Google",
-      location: "Remote",
-      type: "Full-Time",
-      applicants: "15 Applied",
-      capacity: "25 Capacity",
-      salary: "$2500/month",
-      logo: <GoogleIcon />,
-      color: "#4285F4", // Google blue
-      categories: ["Design & Development"],
-      jobType: "Full Time",
-    },
-    {
-      title: "UI/UX Designer",
-      company: "Twitter",
-      location: "Remote",
-      type: "Full-Time",
-      applicants: "8 Applied",
-      capacity: "20 Capacity",
-      salary: "$1800/month",
-      logo: <TwitterIcon />,
-      color: "#1DA1F2", // Twitter blue
-      categories: ["Design & Development"],
-      jobType: "Full Time",
-    },
-    {
-      title: "Frontend Developer",
-      company: "Microsoft",
-      location: "Remote",
-      type: "Full-Time",
-      applicants: "20 Applied",
-      capacity: "40 Capacity",
-      salary: "$2200/month",
-      logo: <WindowIcon />,
-      color: "#00A4EF", // Microsoft blue
-      categories: ["Design & Development"],
-      jobType: "Full Time",
-    },
-    {
-      title: "Backend Developer",
-      company: "Amazon",
-      location: "Remote",
-      type: "Full-Time",
-      applicants: "12 Applied",
-      capacity: "35 Capacity",
-      salary: "$2300/month",
-      logo: <LocalShippingIcon />,
-      color: "#FF9900", // Amazon orange
-      categories: ["Design & Development"],
-      jobType: "Full Time",
-    },
-    {
-      title: "Full Stack Developer",
-      company: "Apple",
-      location: "Remote",
-      type: "Full-Time",
-      applicants: "25 Applied",
-      capacity: "30 Capacity",
-      salary: "$2800/month",
-      logo: <AppleIcon />,
-      color: "#A2AAAD", // Apple silver
-      categories: ["Design & Development"],
-      jobType: "Full Time",
-    },
-    // Additional jobs for all categories
-    {
-      title: "E-commerce Specialist",
-      company: "Shopify",
-      location: "Remote",
-      type: "Part-Time",
-      applicants: "18 Applied",
-      capacity: "25 Capacity",
-      salary: "$2400/month",
-      logo: <ShoppingCartIcon />,
-      color: "#7AB55C", // Shopify green
-      categories: ["Marketing & Communication"],
-      jobType: "Part Time",
-    },
-    {
-      title: "Data Analyst",
-      company: "Netflix",
-      location: "Remote",
-      type: "Full-Time",
-      applicants: "22 Applied",
-      capacity: "30 Capacity",
-      salary: "$2600/month",
-      logo: <MovieIcon />,
-      color: "#E50914", // Netflix red
-      categories: ["Finance"],
-      jobType: "Full Time",
-    },
-    {
-      title: "Photographer",
-      company: "Instagram",
-      location: "Remote",
-      type: "Part-Time",
-      applicants: "15 Applied",
-      capacity: "20 Capacity",
-      salary: "$1900/month",
-      logo: <CameraIcon />,
-      color: "#C13584", // Instagram purple
-      categories: ["Marketing & Communication"],
-      jobType: "Part Time",
-    },
-    // New jobs for remaining categories
-    {
-      title: "HR Manager",
-      company: "LinkedIn",
-      location: "Remote",
-      type: "Full-Time",
-      applicants: "14 Applied",
-      capacity: "25 Capacity",
-      salary: "$3200/month",
-      logo: <PeopleIcon />,
-      color: "#0077B5", // LinkedIn blue
-      categories: ["Human Research"],
-      jobType: "Full Time",
-    },
-    {
-      title: "Security Analyst",
-      company: "Cisco",
-      location: "Remote",
-      type: "Full-Time",
-      applicants: "9 Applied",
-      capacity: "15 Capacity",
-      salary: "$3500/month",
-      logo: <SecurityIcon />,
-      color: "#1BA0D7", // Cisco blue
-      categories: ["Armforce Guide & Security"],
-      jobType: "Full Time",
-    },
-    {
-      title: "Business Consultant",
-      company: "Deloitte",
-      location: "Remote",
-      type: "Full-Time",
-      applicants: "17 Applied",
-      capacity: "30 Capacity",
-      salary: "$4000/month",
-      logo: <BusinessCenterIcon />,
-      color: "#86BC25", // Deloitte green
-      categories: ["Business & Consulting"],
-      jobType: "Full Time",
-    },
-    {
-      title: "Customer Support Specialist",
-      company: "Zendesk",
-      location: "Remote",
-      type: "Full-Time",
-      applicants: "11 Applied",
-      capacity: "20 Capacity",
-      salary: "$2100/month",
-      logo: <HeadsetMicIcon />,
-      color: "#03363D", // Zendesk dark
-      categories: ["Customer Care & Support"],
-      jobType: "Full Time",
-    },
-    {
-      title: "Project Manager",
-      company: "Asana",
-      location: "Remote",
-      type: "Full-Time",
-      applicants: "16 Applied",
-      capacity: "25 Capacity",
-      salary: "$3800/month",
-      logo: <AssignmentIcon />,
-      color: "#F06A6A", // Asana red
-      categories: ["Project Management"],
-      jobType: "Full Time",
-    },
-    {
-      title: "Financial Analyst",
-      company: "JP Morgan",
-      location: "Remote",
-      type: "Full-Time",
-      applicants: "19 Applied",
-      capacity: "30 Capacity",
-      salary: "$3600/month",
-      logo: <AccountBalanceIcon />,
-      color: "#2E3F8F", // JP Morgan blue
-      categories: ["Finance"],
-      jobType: "Full Time",
-    },
-    {
-      title: "Marketing Intern",
-      company: "Spotify",
-      location: "Remote",
-      type: "Internship",
-      applicants: "25 Applied",
-      capacity: "40 Capacity",
-      salary: "$1500/month",
-      logo: <CampaignIcon />,
-      color: "#1DB954", // Spotify green
-      categories: ["Marketing & Communication"],
-      jobType: "Internship",
-    },
-  ]
+  // Firestore jobs state
+  const [allJobs, setAllJobs] = useState([])
+  const [filteredJobs, setFilteredJobs] = useState([])
+  const [loadingJobs, setLoadingJobs] = useState(true)
+  const [jobsError, setJobsError] = useState("")
 
-  // Apply filters
-  const [filteredJobs, setFilteredJobs] = useState(allJobs)
-
-  // Apply filters
+  // Fetch jobs from Firestore on mount
   useEffect(() => {
-    let filtered = [...allJobs]
-
-    // Filter by job type
-    if (selectedJobTypes.length > 0) {
-      filtered = filtered.filter((job) => selectedJobTypes.includes(job.jobType))
+    const fetchJobs = async () => {
+          setLoadingJobs(true);
+          setJobsError("");
+          try {
+            const jobsSnapshot = await getDocs(collection(db, "jobs"));
+            const jobs = jobsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            console.log("[FindJobs] Fetched jobs from Firestore:", jobs);
+            if (jobs.length === 0) {
+              console.warn("[FindJobs] No jobs found in Firestore. If you just posted a job, check your Firestore database and security rules.");
+            }
+            setAllJobs(jobs);
+          } catch (err) {
+            setJobsError("Failed to load jobs from database.");
+            console.error("[FindJobs] Error fetching jobs from Firestore:", err);
+          } finally {
+            setLoadingJobs(false);
+          }
     }
+    fetchJobs()
+  }, [])
 
-    // Filter by category
-    if (selectedCategories.length > 0) {
-      filtered = filtered.filter((job) => job.categories.some((category) => selectedCategories.includes(category)))
-    }
-
-    // Filter by salary
-    filtered = filtered.filter((job) => {
-      const salaryValue = Number.parseInt(job.salary.replace(/[^0-9]/g, ""))
-      return salaryValue >= salaryRange[0] * 1000 && salaryValue <= salaryRange[1] * 1000
-    })
-
-    // Filter by search
-    if (jobTitle) {
-      filtered = filtered.filter(
-        (job) =>
-          job.title.toLowerCase().includes(jobTitle.toLowerCase()) ||
-          job.company.toLowerCase().includes(jobTitle.toLowerCase()),
-      )
-    }
-
-    // Filter by location
-    if (location) {
-      filtered = filtered.filter((job) => job.location.toLowerCase().includes(location.toLowerCase()))
-    }
-
-    // Sort jobs
-    if (sortBy === "Most recent") {
-      // Keep original order for now
-    } else if (sortBy === "Highest salary") {
-      filtered.sort((a, b) => {
-        const salaryA = Number.parseInt(a.salary.replace(/[^0-9]/g, ""))
-        const salaryB = Number.parseInt(b.salary.replace(/[^0-9]/g, ""))
-        return salaryB - salaryA
-      })
-    } else if (sortBy === "Lowest salary") {
-      filtered.sort((a, b) => {
-        const salaryA = Number.parseInt(a.salary.replace(/[^0-9]/g, ""))
-        const salaryB = Number.parseInt(b.salary.replace(/[^0-9]/g, ""))
-        return salaryA - salaryB
-      })
-    }
-
-    setFilteredJobs(filtered)
-  }, [selectedJobTypes, selectedCategories, salaryRange, jobTitle, location, sortBy])
+  // Remove all filter, sort, and location logic. Show all jobs by default.
+  useEffect(() => {
+    setFilteredJobs(allJobs.filter((job) => job.status !== 'Paused'));
+  }, [allJobs]);
 
   // Handle job type checkbox change
   const handleJobTypeChange = (type) => {
@@ -1051,6 +933,26 @@ const FindJobs = () => {
   const handleSearch = () => {
     // The filtering is already handled by the useEffect
   }
+
+
+  // State for job details modal
+  const [selectedJob, setSelectedJob] = useState(null)
+  const [isJobDialogOpen, setIsJobDialogOpen] = useState(false)
+
+
+  // Open job details modal
+  const handleJobCardClick = (job) => {
+    setSelectedJob(job)
+    setIsJobDialogOpen(true)
+  }
+
+  // Close job details modal
+  const handleJobDialogClose = () => {
+    setIsJobDialogOpen(false)
+    setSelectedJob(null)
+  }
+
+
 
   return (
     <PageContainer>
@@ -1384,41 +1286,60 @@ const FindJobs = () => {
           {/* Job Listings - Right next to filter menu */}
           <Box sx={{ flex: 1, pl: 3 }} id="job-listings">
             {/* Initial jobs (always visible) */}
-            {filteredJobs.length > 0 ? (
+            {loadingJobs ? (
+              <Box sx={{ width: "100%", textAlign: "center", py: 10 }}>
+                <CircularProgress />
+                <Typography variant="body1" sx={{ mt: 2 }}>Loading jobs...</Typography>
+              </Box>
+            ) : jobsError ? (
+              <Box sx={{ width: "100%", textAlign: "center", py: 10 }}>
+                <Typography variant="h5" sx={{ color: "#000000", fontWeight: "bold", mb: 2 }}>
+                  {jobsError}
+                </Typography>
+              </Box>
+            ) : filteredJobs.length > 0 ? ( 
               <GridContainer>
-                {initialJobs.map((job, index) => (
-                  <AnimatedContainer key={index} delay={index * 100}>
-                    <JobCard>
+                {filteredJobs.map((job, index) => (
+                  <AnimatedContainer key={job.id || index} delay={index * 100}>
+                    <JobCard onClick={() => handleJobCardClick(job)} sx={{ cursor: 'pointer' }}>
                       <StyledCardContent>
                         <CompanySection>
-                          <CompanyLogo bgcolor={job.color}>{job.logo}</CompanyLogo>
+                          <CompanyLogo>{(job.company && job.company[0]) || '?'}</CompanyLogo>
                           <CompanyInfo>
-                            <CompanyName>{job.company}</CompanyName>
-                            <LocationText>{job.location}</LocationText>
+                            <CompanyName>{job.company || 'Unknown Company'}</CompanyName>
+                            <LocationText>{job.location || 'Unknown Location'}</LocationText>
                           </CompanyInfo>
                         </CompanySection>
 
-                        <JobTitle>{job.title}</JobTitle>
-                        <JobTypeText>{job.type}</JobTypeText>
+                        <JobTitle>{job.title || 'Untitled Job'}</JobTitle>
+                        <JobTypeText>{job.jobType || job.type || ''}</JobTypeText>
 
                         <ApplicationStatus>
-                          {job.applicants} <span>of {job.capacity}</span>
+                          {job.applicants !== undefined ? job.applicants : '—'} {job.capacity ? <span>of {job.capacity}</span> : null}
                         </ApplicationStatus>
 
                         <SalaryText>
-                          {job.salary.split("/")[0]}
-                          <span>/{job.salary.split("/")[1]}</span>
+                          {job.salary ? (job.salary.toString().split('/')[0]) : '—'}
+                          <span>/{job.salary ? (job.salary.toString().split('/')[1] || '') : ''}</span>
                         </SalaryText>
                       </StyledCardContent>
 
                       <ButtonContainer>
-                        <ApplyButton>Apply Now</ApplyButton>
-                        <ContactButton>Contact</ContactButton>
+                        <ApplyButton onClick={(e) => { e.stopPropagation(); handleOpenApplyDialog(job); }}>Apply Now</ApplyButton>
                       </ButtonContainer>
                     </JobCard>
                   </AnimatedContainer>
                 ))}
               </GridContainer>
+            ) : allJobs.length === 0 ? ( 
+              <Box sx={{ width: "100%", textAlign: "center", py: 10 }}>
+                <Typography variant="h5" sx={{ color: "#000000", fontWeight: "bold", mb: 2 }}>
+                  No jobs found in the database.
+                </Typography>
+                <Typography variant="body1" sx={{ color: "#000000", mb: 3 }}>
+                  No jobs were fetched from Firestore. Try posting a job from the employer dashboard first.
+                </Typography>
+              </Box>
             ) : (
               <Box
                 sx={{
@@ -1456,33 +1377,32 @@ const FindJobs = () => {
                 <Fade in={fadeIn} timeout={800}>
                   <GridContainer>
                     {additionalJobs.map((job, index) => (
-                      <AnimatedContainer key={index + 6} delay={index * 100}>
+                      <AnimatedContainer key={job.id || index + 6} delay={index * 100}>
                         <JobCard>
                           <StyledCardContent>
                             <CompanySection>
-                              <CompanyLogo bgcolor={job.color}>{job.logo}</CompanyLogo>
+                              <CompanyLogo>{(job.company && job.company[0]) || '?'}</CompanyLogo>
                               <CompanyInfo>
-                                <CompanyName>{job.company}</CompanyName>
-                                <LocationText>{job.location}</LocationText>
+                                <CompanyName>{job.company || 'Unknown Company'}</CompanyName>
+                                <LocationText>{job.location || 'Unknown Location'}</LocationText>
                               </CompanyInfo>
                             </CompanySection>
 
-                            <JobTitle>{job.title}</JobTitle>
-                            <JobTypeText>{job.type}</JobTypeText>
+                            <JobTitle>{job.title || 'Untitled Job'}</JobTitle>
+                            <JobTypeText>{job.jobType || job.type || ''}</JobTypeText>
 
                             <ApplicationStatus>
-                              {job.applicants} <span>of {job.capacity}</span>
+                              {job.applicants ? job.applicants : ''} {job.capacity ? <span>of {job.capacity}</span> : null}
                             </ApplicationStatus>
 
                             <SalaryText>
-                              {job.salary.split("/")[0]}
-                              <span>/{job.salary.split("/")[1]}</span>
+                              {(job.salary || '').toString().split('/')[0]}
+                              <span>/{(job.salary || '').toString().split('/')[1] || ''}</span>
                             </SalaryText>
                           </StyledCardContent>
 
                           <ButtonContainer>
-                            <ApplyButton>Apply Now</ApplyButton>
-                            <ContactButton>Contact</ContactButton>
+                            <ApplyButton onClick={(e) => { e.stopPropagation(); handleOpenApplyDialog(job); }}>Apply Now</ApplyButton>
                           </ButtonContainer>
                         </JobCard>
                       </AnimatedContainer>
@@ -1509,6 +1429,136 @@ const FindJobs = () => {
           </Box>
         </Box>
       </ContentContainer>
+
+
+      {/* Application Dialog */}
+      <Dialog open={isApplyDialogOpen} onClose={handleCloseApplyDialog} maxWidth="sm" fullWidth>
+        <DialogTitle>Apply for {applyJob?.title || "Job"}</DialogTitle>
+        <DialogContent dividers>
+          {applyJob && (
+            <Box>
+              <Typography variant="subtitle1" gutterBottom><b>Company:</b> {applyJob.company}</Typography>
+              <Typography variant="subtitle1" gutterBottom><b>Location:</b> {applyJob.location}</Typography>
+              <Typography variant="subtitle1" gutterBottom><b>Job Type:</b> {applyJob.jobType || applyJob.type}</Typography>
+            </Box>
+          )}
+          <Box mt={2}>
+            <TextField
+              label="Email"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              fullWidth
+              margin="normal"
+              required
+              type="email"
+            />
+            <TextField
+              label="Phone Number"
+              value={phone}
+              onChange={e => setPhone(e.target.value)}
+              fullWidth
+              margin="normal"
+              required
+              type="tel"
+            />
+            <TextField
+              label="Cover Letter"
+              value={coverLetter}
+              onChange={e => setCoverLetter(e.target.value)}
+              fullWidth
+              multiline
+              minRows={3}
+              margin="normal"
+              required
+            />
+            {/* Resume selection dropdown */}
+            <Box mt={2}>
+              <Typography variant="subtitle2" gutterBottom>Select Resume</Typography>
+              {resumes.length === 0 ? (
+                <Typography color="text.secondary">No resumes found. Please create a resume in the Resume Builder first.</Typography>
+              ) : (
+                <TextField
+                  select
+                  label="Resume"
+                  value={selectedResumeId}
+                  onChange={e => setSelectedResumeId(e.target.value)}
+                  fullWidth
+                  SelectProps={{ native: true }}
+                  margin="normal"
+                  required
+                >
+                  <option value="">Select a resume</option>
+                  {resumes.map(resume => (
+                    <option key={resume.id} value={resume.id}>
+                      {resume.title || resume.name || `Resume (${resume.id?.slice(-4)})`}
+                    </option>
+                  ))}
+                </TextField>
+              )}
+            </Box>
+            {applyError && <Typography color="error" mt={1}>{applyError}</Typography>}
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseApplyDialog} disabled={applying}>Cancel</Button>
+          <Button onClick={handleSubmitApplication} variant="contained" color="primary" disabled={applying || alreadyApplied}>
+            {alreadyApplied ? "Already Applied" : (applying ? "Applying..." : "Submit Application")}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Job Details Modal */}
+      <Dialog open={isJobDialogOpen} onClose={handleJobDialogClose} maxWidth="sm" fullWidth>
+        <DialogTitle>Job Details</DialogTitle>
+        <DialogContent dividers>
+          {selectedJob && (
+            <Box>
+              <Typography variant="h5" fontWeight={700} gutterBottom>{selectedJob.title}</Typography>
+              <Typography variant="subtitle1" gutterBottom><b>Company:</b> {selectedJob.company}</Typography>
+              <Typography variant="subtitle1" gutterBottom><b>Location:</b> {selectedJob.location}</Typography>
+              <Typography variant="subtitle1" gutterBottom><b>Job Type:</b> {selectedJob.jobType || selectedJob.type}</Typography>
+              {selectedJob.experience && (
+                <Typography variant="subtitle1" gutterBottom><b>Experience:</b> {selectedJob.experience}</Typography>
+              )}
+              {selectedJob.salary && (
+                <Typography variant="subtitle1" gutterBottom><b>Salary:</b> {selectedJob.salary}</Typography>
+              )}
+              {selectedJob.description && (
+                <Typography variant="body1" gutterBottom><b>Description:</b> {selectedJob.description}</Typography>
+              )}
+              {selectedJob.requirements && (
+                <Typography variant="body1" gutterBottom><b>Requirements:</b> {selectedJob.requirements}</Typography>
+              )}
+              {selectedJob.skills && Array.isArray(selectedJob.skills) && (
+                <Box mb={2}>
+                  <Typography variant="subtitle1" gutterBottom><b>Skills:</b></Typography>
+                  <ul style={{ marginTop: 0 }}>
+                    {selectedJob.skills.map((skill, idx) => (
+                      <li key={idx}><Typography variant="body2">{skill}</Typography></li>
+                    ))}
+                  </ul>
+                </Box>
+              )}
+              {selectedJob.employerId && (
+                <Typography variant="body2" gutterBottom><b>Employer ID:</b> {selectedJob.employerId}</Typography>
+              )}
+              {selectedJob.postedAt && (
+                <Typography variant="body2" gutterBottom><b>Posted At:</b> {new Date(selectedJob.postedAt).toLocaleString()}</Typography>
+              )}
+              {/* Show any other fields dynamically */}
+              {Object.entries(selectedJob).map(([key, value]) => {
+                if (["title","company","location","jobType","type","experience","salary","description","requirements","skills","employerId","postedAt","id","applicants","capacity"].includes(key)) return null;
+                return (
+                  <Typography variant="body2" gutterBottom key={key}><b>{key}:</b> {typeof value === 'object' ? JSON.stringify(value) : String(value)}</Typography>
+                );
+              })}
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleJobDialogClose} color="primary">Close</Button>
+        </DialogActions>
+      </Dialog>
 
       {/* Footer */}
       <Footer />

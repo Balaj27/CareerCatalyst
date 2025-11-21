@@ -14,6 +14,9 @@ import {
   Paper,
 } from "@mui/material"
 import { TrendingUp, TrendingDown, Visibility, People, Work, Schedule } from "@mui/icons-material"
+import { useEffect, useState } from "react"
+import { db, auth } from "../../lib/firebase"
+import { collection, query, where, getDocs } from "firebase/firestore"
 
 const MetricCard = ({ title, value, change, changeType, icon, color }) => (
   <Card>
@@ -52,15 +55,19 @@ const MetricCard = ({ title, value, change, changeType, icon, color }) => (
   </Card>
 )
 
-const JobPerformanceTable = () => {
-  const jobData = [
-    { job: "Senior React Developer", applications: 45, views: 234, conversion: 19.2 },
-    { job: "UI/UX Designer", applications: 32, views: 189, conversion: 16.9 },
-    { job: "Backend Developer", applications: 28, views: 156, conversion: 17.9 },
-    { job: "Product Manager", applications: 67, views: 345, conversion: 19.4 },
-    { job: "DevOps Engineer", applications: 23, views: 134, conversion: 17.2 },
-  ]
-
+const JobPerformanceTable = ({ jobs, applications }) => {
+  // Map jobId to applications count and views
+  const jobStats = jobs.map(job => {
+    const jobApps = applications.filter(app => app.jobId === job.id);
+    const views = job.views || 0;
+    const conversion = views > 0 ? ((jobApps.length / views) * 100).toFixed(1) : 0;
+    return {
+      job: job.title,
+      applications: jobApps.length,
+      views,
+      conversion,
+    };
+  });
   return (
     <Card>
       <CardContent>
@@ -78,7 +85,7 @@ const JobPerformanceTable = () => {
               </TableRow>
             </TableHead>
             <TableBody>
-              {jobData.map((row, index) => (
+              {jobStats.map((row, index) => (
                 <TableRow key={index}>
                   <TableCell component="th" scope="row">
                     {row.job}
@@ -90,7 +97,7 @@ const JobPerformanceTable = () => {
                       <Box sx={{ width: 60, mr: 1 }}>
                         <LinearProgress
                           variant="determinate"
-                          value={row.conversion}
+                          value={parseFloat(row.conversion)}
                           sx={{ height: 6, borderRadius: 3 }}
                         />
                       </Box>
@@ -104,19 +111,10 @@ const JobPerformanceTable = () => {
         </TableContainer>
       </CardContent>
     </Card>
-  )
-}
+  );
+};
 
-const TopSkillsChart = () => {
-  const skills = [
-    { skill: "React", demand: 85 },
-    { skill: "JavaScript", demand: 78 },
-    { skill: "Python", demand: 72 },
-    { skill: "Node.js", demand: 65 },
-    { skill: "TypeScript", demand: 58 },
-    { skill: "AWS", demand: 52 },
-  ]
-
+const TopSkillsChart = ({ topSkills }) => {
   return (
     <Card>
       <CardContent>
@@ -124,24 +122,96 @@ const TopSkillsChart = () => {
           Most In-Demand Skills
         </Typography>
         <Box>
-          {skills.map((item, index) => (
+          {topSkills.map((item, index) => (
             <Box key={index} sx={{ mb: 2 }}>
               <Box sx={{ display: "flex", justifyContent: "space-between", mb: 0.5 }}>
                 <Typography variant="body2">{item.skill}</Typography>
                 <Typography variant="body2" color="text.secondary">
-                  {item.demand}%
+                  {item.count}
                 </Typography>
               </Box>
-              <LinearProgress variant="determinate" value={item.demand} sx={{ height: 8, borderRadius: 4 }} />
+              <LinearProgress variant="determinate" value={Math.min((item.count / topSkills[0].count) * 100, 100)} sx={{ height: 8, borderRadius: 4 }} />
             </Box>
           ))}
         </Box>
       </CardContent>
     </Card>
-  )
-}
+  );
+};
 
 const AnalyticsDashboard = () => {
+  const [jobs, setJobs] = useState([]);
+  const [applications, setApplications] = useState([]);
+  const [topSkills, setTopSkills] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      setLoading(true);
+      try {
+        const user = auth.currentUser;
+        if (!user) {
+          setJobs([]);
+          setApplications([]);
+          setTopSkills([]);
+          setLoading(false);
+          return;
+        }
+        // Fetch jobs for this employer
+        const jobsQ = query(collection(db, "jobs"), where("employerId", "==", user.uid));
+        const jobsSnap = await getDocs(jobsQ);
+        const jobsData = jobsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        setJobs(jobsData);
+
+        // Fetch applications for these jobs
+        let jobIds = jobsData.map(j => j.id);
+        let appsData = [];
+        // Firestore 'in' queries are limited to 10 elements
+        for (let i = 0; i < jobIds.length; i += 10) {
+          const appsQ = query(collection(db, "applications"), where("jobId", "in", jobIds.slice(i, i + 10)));
+          const appsSnap = await getDocs(appsQ);
+          appsData = appsData.concat(appsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+        }
+        setApplications(appsData);
+
+        // Compute top skills
+        const skillCounts = {};
+        jobsData.forEach(job => {
+          let skills = job.skills;
+          if (typeof skills === "string") {
+            skills = skills.split(",").map(s => s.trim()).filter(Boolean);
+          }
+          if (Array.isArray(skills)) {
+            skills.forEach(skill => {
+              const skillName = typeof skill === "object" && skill !== null ? skill.name : skill;
+              if (skillName) {
+                skillCounts[skillName] = (skillCounts[skillName] || 0) + 1;
+              }
+            });
+          }
+        });
+        const sortedSkills = Object.entries(skillCounts)
+          .map(([skill, count]) => ({ skill, count }))
+          .sort((a, b) => b.count - a.count)
+          .slice(0, 7);
+        setTopSkills(sortedSkills);
+      } catch (err) {
+        setJobs([]);
+        setApplications([]);
+        setTopSkills([]);
+      }
+      setLoading(false);
+    };
+    fetchData();
+  }, []);
+
+  // Compute metrics
+  const totalViews = jobs.reduce((sum, job) => sum + (job.views || 0), 0);
+  const totalApplications = applications.length;
+  const activeJobs = jobs.filter(j => (j.status || "Active") === "Active").length;
+  // Interviews: not implemented, so show 0
+  const interviews = 0;
+
   return (
     <Box>
       <Typography variant="h4" gutterBottom fontWeight="bold" color="#1a5f5f">
@@ -155,8 +225,8 @@ const AnalyticsDashboard = () => {
         <Grid item xs={12} sm={6} md={3}>
           <MetricCard
             title="Total Views"
-            value="2,847"
-            change="12"
+            value={loading ? "..." : totalViews}
+            change={"-"}
             changeType="increase"
             icon={<Visibility />}
             color="primary"
@@ -165,21 +235,21 @@ const AnalyticsDashboard = () => {
         <Grid item xs={12} sm={6} md={3}>
           <MetricCard
             title="Applications"
-            value="195"
-            change="8"
+            value={loading ? "..." : totalApplications}
+            change={"-"}
             changeType="increase"
             icon={<People />}
             color="success"
           />
         </Grid>
         <Grid item xs={12} sm={6} md={3}>
-          <MetricCard title="Active Jobs" value="12" change="3" changeType="decrease" icon={<Work />} color="info" />
+          <MetricCard title="Active Jobs" value={loading ? "..." : activeJobs} change={"-"} changeType="decrease" icon={<Work />} color="info" />
         </Grid>
         <Grid item xs={12} sm={6} md={3}>
           <MetricCard
             title="Interviews"
-            value="28"
-            change="15"
+            value={loading ? "..." : interviews}
+            change={"-"}
             changeType="increase"
             icon={<Schedule />}
             color="warning"
@@ -187,14 +257,14 @@ const AnalyticsDashboard = () => {
         </Grid>
 
         <Grid item xs={12} md={8}>
-          <JobPerformanceTable />
+          <JobPerformanceTable jobs={jobs} applications={applications} />
         </Grid>
         <Grid item xs={12} md={4}>
-          <TopSkillsChart />
+          <TopSkillsChart topSkills={topSkills} />
         </Grid>
       </Grid>
     </Box>
-  )
-}
+  );
+};
 
 export default AnalyticsDashboard

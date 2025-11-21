@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import {
   Card,
   CardContent,
@@ -19,7 +19,7 @@ import {
 import { Add, Delete } from "@mui/icons-material"
 import AIJobAutoFillButton from "../../Services/AiJobButton" // <-- Import the AI button component
 import { db, auth } from "../../lib/firebase" // <-- Import from your lib directory
-import { collection, addDoc } from "firebase/firestore"
+import { collection, addDoc, doc, getDoc } from "firebase/firestore"
 
 const PostJob = () => {
   const [jobData, setJobData] = useState({
@@ -33,6 +33,7 @@ const PostJob = () => {
     requirements: "",
     skills: [],
   })
+  // Remove loadingCompany state and auto-fetch logic
   const [skillInput, setSkillInput] = useState("")
   const [showSuccess, setShowSuccess] = useState(false)
   const [showError, setShowError] = useState("")
@@ -68,32 +69,32 @@ const PostJob = () => {
     }))
   }
 
-  // Save job to Firebase Firestore under employers/{employerId}/jobs
+  // Save job to Firebase Firestore in top-level 'jobs' collection
   const saveJobPosting = async (jobData) => {
     const user = auth.currentUser // logged in employer
-
     if (!user) throw new Error("User not logged in!")
-
-    const jobsCollection = collection(db, "employers", user.uid, "jobs")
-    const jobRef = await addDoc(jobsCollection, {
+    const jobsCollection = collection(db, "jobs");
+    const jobToPost = {
       ...jobData,
-      postedAt: new Date().toISOString()
-    })
-    return jobRef.id
+      employerId: user.uid,
+      postedAt: new Date().toISOString(),
+    };
+    const jobRef = await addDoc(jobsCollection, jobToPost);
+    console.log("[PostJobs] Job posted to Firestore:", jobToPost, "with id:", jobRef.id);
+    return jobRef.id;
   }
 
   const handleSubmit = async (event) => {
-    event.preventDefault()
-    setShowError("")
+    event.preventDefault();
+    setShowError("");
     try {
-      await saveJobPosting(jobData)
-      setShowSuccess(true)
-      setTimeout(() => setShowSuccess(false), 3000)
-
-      // Reset form
-      setJobData({
+      await saveJobPosting(jobData);
+      setShowSuccess(true);
+      setTimeout(() => setShowSuccess(false), 3000);
+      // Reset form, but keep company name
+      setJobData((prev) => ({
         title: "",
-        company: "",
+        company: prev.company,
         location: "",
         jobType: "",
         experience: "",
@@ -101,11 +102,13 @@ const PostJob = () => {
         description: "",
         requirements: "",
         skills: [],
-      })
+      }));
     } catch (err) {
-      setShowError("Failed to post job: " + err.message)
+      setShowError("Failed to post job: " + err.message);
     }
-  }
+  };
+
+
 
   return (
     <Box>

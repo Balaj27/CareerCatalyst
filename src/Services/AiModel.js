@@ -1,7 +1,7 @@
 import { Gem } from "lucide-react";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
-const apiKey = "AIzaSyBbhkLUVTDC1j9GpVBJyGcs3YYe2oQHoC0";  // replace with your key
+const apiKey = "AIzaSyAB1vyPO0vT2Q22FwuhWRuVh0bR9MXVbhg";  // replace with your key
 const genAI = new GoogleGenerativeAI(apiKey);
 
 // Use a newer model, e.g. gemini-2.5-flash-lite
