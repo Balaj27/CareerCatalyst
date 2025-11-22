@@ -39,8 +39,15 @@ const formFields = {
 
 function Experience({ resumeInfo }) {
   const [experienceList, setExperienceList] = React.useState(
-    resumeInfo?.experience || [formFields]
+    resumeInfo?.experience && resumeInfo.experience.length > 0 ? resumeInfo.experience : [formFields]
   );
+
+  // Auto-fill experience fields when resumeInfo.experience changes
+  useEffect(() => {
+    if (resumeInfo?.experience && resumeInfo.experience.length > 0) {
+      setExperienceList(resumeInfo.experience);
+    }
+  }, [resumeInfo?.experience]);
   const [loading, setLoading] = React.useState(false);
   const { resumeId, resume_id } = useParams();
   const resolvedResumeId = resumeId || resume_id;

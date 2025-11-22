@@ -53,6 +53,12 @@ export const getUserProfileData = async () => {
       profileData.summary = data.summary || data.personalInfo?.summary || profileData.summary;
       profileData.skills = Array.isArray(data.skills) ? data.skills : [];
       profileData.desiredJobTitle = data.jobPreferences?.desiredJobTitle || "";
+
+      // Map education and experience arrays from DB structure
+      profileData.education = Array.isArray(data.education) ? data.education : [];
+      profileData.experience = Array.isArray(data.experience) ? data.experience : [];
+      profileData.certifications = Array.isArray(data.certifications) ? data.certifications : [];
+      profileData.jobPreferences = data.jobPreferences || {};
     }
 
     console.log("Final profile data:", profileData); // Debug log
@@ -68,6 +74,56 @@ export const convertProfileToResumeData = (profileData) => {
   const [firstName, ...lastNameParts] = (profileData.fullName || "").split(" ");
   const lastName = lastNameParts.join(" ") || "";
 
+
+  // Map education for ResumeForm
+  const education = Array.isArray(profileData.education)
+    ? profileData.education.map(edu => ({
+        universityName: edu.institution || edu.universityName || "",
+        degree: edu.degree || "",
+        major: edu.field || edu.major || "",
+        grade: edu.grade || "",
+        gradeType: edu.gradeType || "CGPA",
+        startDate: edu.startDate || "",
+        endDate: edu.endDate || ""
+      }))
+    : [];
+
+  // Map experience for ResumeForm
+  const experience = Array.isArray(profileData.experience)
+    ? profileData.experience.map(exp => {
+        let city = "";
+        let state = "";
+        if (exp.location) {
+          const parts = exp.location.split(',');
+          city = parts[0]?.trim() || "";
+          state = parts[1]?.trim() || "";
+        }
+        return {
+          title: exp.position || exp.title || "",
+          companyName: exp.company || exp.companyName || "",
+          city,
+          state,
+          startDate: exp.startDate || "",
+          endDate: exp.endDate || "",
+          currentlyWorking: false,
+          workSummary: exp.workSummary || ""
+        };
+      })
+    : [];
+
+  // Map skills for ResumeForm
+  const skills = Array.isArray(profileData.skills)
+    ? profileData.skills.map(skill => ({ name: skill, rating: 0 }))
+    : [];
+
+  // Map certifications
+  const certifications = Array.isArray(profileData.certifications)
+    ? profileData.certifications.map(cert => ({ ...cert }))
+    : [];
+
+  // Map job preferences
+  const jobPreferences = profileData.jobPreferences || {};
+
   const resumeData = {
     personal: {
       firstName: firstName || "",
@@ -78,11 +134,12 @@ export const convertProfileToResumeData = (profileData) => {
       address: profileData.location || "",
     },
     summary: profileData.summary || "",
-    skills: profileData.skills || [],
-    // Add other sections as needed
-    experience: [],
-    education: [],
-    projects: []
+    skills,
+    experience,
+    education,
+    certifications,
+    jobPreferences,
+    projects: Array.isArray(profileData.projects) ? profileData.projects : []
   };
 
   console.log("Converted profile to resume data:", resumeData); // Debug log

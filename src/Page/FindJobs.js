@@ -4,6 +4,7 @@ import { collection, getDocs } from "firebase/firestore"
 import { useAuth } from "../lib/auth-context"
 // import { getAllResumeData } from "../app/services/ResumeAPI"
 import { submitApplication, getApplicationsForUser } from "../lib/firestore-application"
+import { saveJob, unsaveJob, getSavedJobsForUser } from "../lib/firestore-saved-jobs";
 import { sendCandidateEmail } from "../Services/sendCandidateEmail";
 import { getAllResumeData } from "../Services/resumeAPI"
 import {
@@ -31,7 +32,8 @@ import {
   CircularProgress,
   DialogContent,
   DialogActions,
-} from "@mui/material"
+  IconButton
+} from "@mui/material";
 import { styled } from "@mui/material/styles"
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown"
 import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp"
@@ -46,6 +48,8 @@ import MovieIcon from "@mui/icons-material/Movie" // For Netflix
 import CameraIcon from "@mui/icons-material/Camera" // For Instagram
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore"
 import ExpandLessIcon from "@mui/icons-material/ExpandLess"
+import FavoriteIcon from "@mui/icons-material/Favorite";
+import FavoriteBorderIcon from "@mui/icons-material/FavoriteBorder";
 import CheckIcon from "@mui/icons-material/Check" // For custom checkbox
 import PeopleIcon from "@mui/icons-material/People" // For Human Research
 import SecurityIcon from "@mui/icons-material/Security" // For Armforce Guide & Security
@@ -822,34 +826,73 @@ const FindJobs = () => {
   const [filteredJobs, setFilteredJobs] = useState([])
   const [loadingJobs, setLoadingJobs] = useState(true)
   const [jobsError, setJobsError] = useState("")
+  // Saved jobs state
+  const [savedJobIds, setSavedJobIds] = useState([]);
+  const [savingJobId, setSavingJobId] = useState("");
+  const [showSavedOnly, setShowSavedOnly] = useState(false);
 
   // Fetch jobs from Firestore on mount
   useEffect(() => {
     const fetchJobs = async () => {
-          setLoadingJobs(true);
-          setJobsError("");
-          try {
-            const jobsSnapshot = await getDocs(collection(db, "jobs"));
-            const jobs = jobsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            console.log("[FindJobs] Fetched jobs from Firestore:", jobs);
-            if (jobs.length === 0) {
-              console.warn("[FindJobs] No jobs found in Firestore. If you just posted a job, check your Firestore database and security rules.");
-            }
-            setAllJobs(jobs);
-          } catch (err) {
-            setJobsError("Failed to load jobs from database.");
-            console.error("[FindJobs] Error fetching jobs from Firestore:", err);
-          } finally {
-            setLoadingJobs(false);
-          }
+      setLoadingJobs(true);
+      setJobsError("");
+      try {
+        const jobsSnapshot = await getDocs(collection(db, "jobs"));
+        const jobs = jobsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        setAllJobs(jobs);
+      } catch (err) {
+        setJobsError("Failed to load jobs from database.");
+      } finally {
+        setLoadingJobs(false);
+      }
+    };
+    fetchJobs();
+  }, []);
+
+  // Fetch saved jobs for user
+  useEffect(() => {
+    const fetchSavedJobs = async () => {
+      if (currentUser?.uid) {
+        try {
+          const ids = await getSavedJobsForUser(currentUser.uid);
+          setSavedJobIds(ids);
+        } catch {}
+      } else {
+        setSavedJobIds([]);
+      }
+    };
+    fetchSavedJobs();
+  }, [currentUser]);
+  // Save/Unsave job handlers
+  const handleSaveJob = async (jobId) => {
+    if (!currentUser?.uid) return;
+    setSavingJobId(jobId);
+    try {
+      await saveJob({ jobId, userId: currentUser.uid });
+      setSavedJobIds((prev) => [...prev, jobId]);
+    } finally {
+      setSavingJobId("");
     }
-    fetchJobs()
-  }, [])
+  };
+  const handleUnsaveJob = async (jobId) => {
+    if (!currentUser?.uid) return;
+    setSavingJobId(jobId);
+    try {
+      await unsaveJob({ jobId, userId: currentUser.uid });
+      setSavedJobIds((prev) => prev.filter((id) => id !== jobId));
+    } finally {
+      setSavingJobId("");
+    }
+  };
 
   // Remove all filter, sort, and location logic. Show all jobs by default.
   useEffect(() => {
-    setFilteredJobs(allJobs.filter((job) => job.status !== 'Paused'));
-  }, [allJobs]);
+    let jobs = allJobs.filter((job) => job.status !== 'Paused');
+    if (showSavedOnly) {
+      jobs = jobs.filter((job) => savedJobIds.includes(job.id));
+    }
+    setFilteredJobs(jobs);
+  }, [allJobs, showSavedOnly, savedJobIds]);
 
   // Handle job type checkbox change
   const handleJobTypeChange = (type) => {
@@ -1094,6 +1137,14 @@ const FindJobs = () => {
           }}
         >
           <SectionTitle>Recommended Jobs</SectionTitle>
+          <Button
+            variant={showSavedOnly ? "contained" : "outlined"}
+            color="success"
+            onClick={() => setShowSavedOnly((prev) => !prev)}
+            sx={{ minWidth: 120, ml: 2 }}
+          >
+            {showSavedOnly ? "Show All" : "Show Saved"}
+          </Button>
           <Box sx={{ position: "relative" }}>
             <SortButton
               endIcon={<KeyboardArrowDownIcon />}
@@ -1326,6 +1377,23 @@ const FindJobs = () => {
 
                       <ButtonContainer>
                         <ApplyButton onClick={(e) => { e.stopPropagation(); handleOpenApplyDialog(job); }}>Apply Now</ApplyButton>
+                        <IconButton
+                          aria-label={savedJobIds.includes(job.id) ? "Unsave job" : "Save job"}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            savedJobIds.includes(job.id)
+                              ? handleUnsaveJob(job.id)
+                              : handleSaveJob(job.id);
+                          }}
+                          disabled={savingJobId === job.id}
+                          sx={{ color: savedJobIds.includes(job.id) ? "#00A389" : "#BDBDBD" }}
+                        >
+                          {savedJobIds.includes(job.id) ? (
+                            <FavoriteIcon />
+                          ) : (
+                            <FavoriteBorderIcon />
+                          )}
+                        </IconButton>
                       </ButtonContainer>
                     </JobCard>
                   </AnimatedContainer>
@@ -1403,6 +1471,23 @@ const FindJobs = () => {
 
                           <ButtonContainer>
                             <ApplyButton onClick={(e) => { e.stopPropagation(); handleOpenApplyDialog(job); }}>Apply Now</ApplyButton>
+                            <IconButton
+                              aria-label={savedJobIds.includes(job.id) ? "Unsave job" : "Save job"}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                savedJobIds.includes(job.id)
+                                  ? handleUnsaveJob(job.id)
+                                  : handleSaveJob(job.id);
+                              }}
+                              disabled={savingJobId === job.id}
+                              sx={{ color: savedJobIds.includes(job.id) ? "#00A389" : "#BDBDBD" }}
+                            >
+                              {savedJobIds.includes(job.id) ? (
+                                <FavoriteIcon />
+                              ) : (
+                                <FavoriteBorderIcon />
+                              )}
+                            </IconButton>
                           </ButtonContainer>
                         </JobCard>
                       </AnimatedContainer>

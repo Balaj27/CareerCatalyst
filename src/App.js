@@ -4,6 +4,7 @@ import './App.css';
 import Login from "./Page/Login";
 import Signup from "./Page/SignUp";
 import DashboardPage from "./Page/Dashboard";
+import ForgotPassword from "./Page/ForgotPassword";
 import EditProfile from "./Page/EditUser";
 import Profile from "./Page/Profile";
 import Resume from "./Page/Resume/Dashboard";
@@ -30,6 +31,7 @@ function App() {
       <Router>
         {/* Routes */}
         <Routes>
+                    <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/" element={<LandingPage />} />
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />

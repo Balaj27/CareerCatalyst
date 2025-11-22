@@ -13,6 +13,8 @@ import Footer from "../components/Footer"
 import { getDoc, setDoc, doc } from "firebase/firestore"
 import { db } from "../lib/firebase"
 import { useAuth } from "../lib/auth-context"
+import { sendProfileDeletionEmail } from "../lib/sendProfileDeletionEmail"
+import { deleteUser } from "firebase/auth";
 
 const PageWrapper = styled(Box)({ backgroundColor: "#004D40", minHeight: "100vh", display: "flex", justifyContent: "center", padding: "20px" })
 const FormWrapper = styled(Box)(({ theme }) => ({
@@ -74,7 +76,28 @@ const EditProfile = () => {
     availability: ""
   })
 
-  // FETCH DATA FROM FIRESTORE
+  // Delete account handler
+  const handleDeleteAccount = async () => {
+    if (!currentUser) return;
+    if (!window.confirm("Are you sure you want to delete your account? This action cannot be undone.")) return;
+    setIsLoading(true);
+    try {
+      await deleteUser(currentUser);
+      // Send profile deletion email
+      await sendProfileDeletionEmail({
+        to: currentUser.email,
+        candidateName: currentUser.displayName || currentUser.email,
+      });
+      setNotification({ open: true, message: "Account deleted successfully.", severity: "success" });
+      setTimeout(() => {
+        navigate("/login");
+      }, 2000);
+    } catch (err) {
+      setNotification({ open: true, message: err.message || "Failed to delete account.", severity: "error" });
+    } finally {
+      setIsLoading(false);
+    }
+  };
   useEffect(() => {
     if (loading || !currentUser?.uid) return;
     async function fetchProfile() {
@@ -923,6 +946,16 @@ const EditProfile = () => {
             <RegisterButton type="submit" variant="contained" disabled={isLoading}>
               {isLoading ? "Updating..." : "Save Changes"}
             </RegisterButton>
+            <Button
+              variant="outlined"
+              color="error"
+              startIcon={<DeleteIcon />}
+              onClick={handleDeleteAccount}
+              sx={{ mt: 3, width: "100%" }}
+              disabled={isLoading}
+            >
+              Delete Account
+            </Button>
           </form>
           <Snackbar
             open={notification.open}

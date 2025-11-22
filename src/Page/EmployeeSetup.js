@@ -40,8 +40,10 @@ import {
 } from '@mui/icons-material';
 
 import { ThemeProvider, createTheme } from '@mui/material/styles';
+
 import Footer from "../components/Footer";
 import Navbar from '../components/landing-page/Navbar';
+import { generateProfessionalSummary } from '../Services/generateProfessionalSummary';
 
 // THEME - matches your dark/green palette
 const theme = createTheme({
@@ -122,60 +124,97 @@ const theme = createTheme({
 });
 
 // --- Section Components ---
-const PersonalInfoSection = ({ formData, updateForm }) => (
-  <Box>
-    <Typography variant="h5" gutterBottom sx={{ color: "#fff" }}>Personal Information</Typography>
-    <Grid container spacing={2}>
-      <Grid item xs={12} md={6} width={"49%"}>
-        <TextField
-          fullWidth label="Full Name" placeholder="John Doe"
-          variant="outlined" value={formData.fullName || ''}
-          onChange={e => updateForm('fullName', e.target.value)}
-          required
-        />
+
+// Removed duplicate import of React and useState
+const PersonalInfoSection = ({ formData, updateForm }) => {
+  const [generating, setGenerating] = useState(false);
+  const [genError, setGenError] = useState('');
+
+  const handleGenerateSummary = async () => {
+    setGenError('');
+    setGenerating(true);
+    try {
+      const summary = await generateProfessionalSummary(formData.jobTitle);
+      updateForm('summary', summary);
+    } catch (err) {
+      setGenError('Failed to generate summary. Please try again.');
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  return (
+    <Box>
+      <Typography variant="h5" gutterBottom sx={{ color: "#fff" }}>Personal Information</Typography>
+      <Grid container spacing={2}>
+        <Grid item xs={12} md={6} width={"49%"}>
+          <TextField
+            fullWidth label="Full Name" placeholder="John Doe"
+            variant="outlined" value={formData.fullName || ''}
+            onChange={e => updateForm('fullName', e.target.value)}
+            required
+          />
+        </Grid>
+        <Grid item xs={12} md={6} width={"48%"}>
+          <TextField
+            fullWidth label="Job Title" placeholder="Software Engineer"
+            variant="outlined" value={formData.jobTitle || ''}
+            onChange={e => updateForm('jobTitle', e.target.value)}
+            required
+          />
+        </Grid>
+        <Grid item xs={12} md={6} width={"49%"}>
+          <TextField
+            fullWidth label="Email" placeholder="john@example.com"
+            variant="outlined" type="email" value={formData.email || ''}
+            onChange={e => updateForm('email', e.target.value)}
+            required
+          />
+        </Grid>
+        <Grid item xs={12} md={6} width={"48%"}>
+          <TextField
+            fullWidth label="Phone" placeholder="+1 (555) 123-4567"
+            variant="outlined" value={formData.phone || ''}
+            onChange={e => updateForm('phone', e.target.value)}
+          />
+        </Grid>
+        <Grid item xs={12} width={"49%"}>
+          <TextField
+            fullWidth label="Location" placeholder="City, Country"
+            variant="outlined" value={formData.location || ''}
+            onChange={e => updateForm('location', e.target.value)}
+          />
+        </Grid>
+        <Grid item xs={12} width={"100%"}>
+          <TextField
+            fullWidth label="Professional Summary"
+            placeholder="Brief overview of your professional background and career goals..."
+            variant="outlined" multiline rows={4}
+            value={formData.summary || ''}
+            onChange={e => updateForm('summary', e.target.value)}
+            InputProps={{
+              endAdornment: (
+                <Button
+                  variant="contained"
+                  color="success"
+                  size="small"
+                  onClick={handleGenerateSummary}
+                  disabled={generating || !formData.jobTitle}
+                  sx={{ ml: 2 }}
+                >
+                  {generating ? 'Generating...' : 'Generate with AI'}
+                </Button>
+              )
+            }}
+          />
+          {genError && (
+            <Alert severity="error" sx={{ mt: 1 }}>{genError}</Alert>
+          )}
+        </Grid>
       </Grid>
-      <Grid item xs={12} md={6} width={"48%"}>
-        <TextField
-          fullWidth label="Job Title" placeholder="Software Engineer"
-          variant="outlined" value={formData.jobTitle || ''}
-          onChange={e => updateForm('jobTitle', e.target.value)}
-          required
-        />
-      </Grid>
-      <Grid item xs={12} md={6} width={"49%"}>
-        <TextField
-          fullWidth label="Email" placeholder="john@example.com"
-          variant="outlined" type="email" value={formData.email || ''}
-          onChange={e => updateForm('email', e.target.value)}
-          required
-        />
-      </Grid>
-      <Grid item xs={12} md={6} width={"48%"}>
-        <TextField
-          fullWidth label="Phone" placeholder="+1 (555) 123-4567"
-          variant="outlined" value={formData.phone || ''}
-          onChange={e => updateForm('phone', e.target.value)}
-        />
-      </Grid>
-      <Grid item xs={12} width={"49%"}>
-        <TextField
-          fullWidth label="Location" placeholder="City, Country"
-          variant="outlined" value={formData.location || ''}
-          onChange={e => updateForm('location', e.target.value)}
-        />
-      </Grid>
-      <Grid item xs={12}width={"100%"}>
-        <TextField
-          fullWidth label="Professional Summary"
-          placeholder="Brief overview of your professional background and career goals..."
-          variant="outlined" multiline rows={4}
-          value={formData.summary || ''}
-          onChange={e => updateForm('summary', e.target.value)}
-        />
-      </Grid>
-    </Grid>
-  </Box>
-);
+    </Box>
+  );
+};
 
 const EducationSection = ({ formData, updateForm }) => {
   const [education, setEducation] = useState(formData.education || []);
@@ -184,8 +223,7 @@ const EducationSection = ({ formData, updateForm }) => {
     degree: '',
     field: '',
     startDate: '',
-    endDate: '',
-    description: ''
+    endDate: ''
   });
 
   const addEducation = () => {
@@ -199,8 +237,7 @@ const EducationSection = ({ formData, updateForm }) => {
       degree: '',
       field: '',
       startDate: '',
-      endDate: '',
-      description: ''
+      endDate: ''
     });
   };
 
@@ -235,9 +272,7 @@ const EducationSection = ({ formData, updateForm }) => {
           <Typography variant="body2" color="rgba(255,255,255,0.7)">
             {edu.field} ({edu.startDate} - {edu.endDate})
           </Typography>
-          <Typography variant="body2" sx={{ mt: 1 }}>
-            {edu.description}
-          </Typography>
+          {/* Description removed from education display */}
         </Paper>
       ))}
       
@@ -297,18 +332,7 @@ const EducationSection = ({ formData, updateForm }) => {
                 onChange={(e) => setCurrentItem({...currentItem, endDate: e.target.value})}
               />
             </Grid>
-            <Grid item xs={12} width={"100%"}>
-              <TextField
-                fullWidth
-                label="Description"
-                placeholder="Relevant courses, achievements, etc."
-                variant="outlined"
-                multiline
-                rows={3}
-                value={currentItem.description}
-                onChange={(e) => setCurrentItem({...currentItem, description: e.target.value})}
-              />
-            </Grid>
+            {/* Description field removed from education input */}
           </Grid>
           <Button
             variant="contained"

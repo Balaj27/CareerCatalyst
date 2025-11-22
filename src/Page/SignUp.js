@@ -13,10 +13,13 @@ import { styled } from "@mui/material/styles";
 import GoogleIcon from "@mui/icons-material/Google";
 import { useNavigate } from "react-router-dom";
 import { auth, db } from "../lib/firebase";
+// import axios from "axios";
 import {
   createUserWithEmailAndPassword,
   GoogleAuthProvider,
   signInWithPopup,
+  sendEmailVerification,
+  onAuthStateChanged
 } from "firebase/auth";
 import {
   collection,
@@ -190,8 +193,11 @@ export default function Signup() {
       );
       const user = userCredential.user;
 
+      // Send Firebase verification email (modular API)
+      await sendEmailVerification(user);
+
+      // Store user in Firestore
       if (isEmployer) {
-        // Store employer data
         await addDoc(collection(db, "employers"), {
           uid: user.uid,
           email: user.email,
@@ -200,30 +206,21 @@ export default function Signup() {
           companyLocation,
           createdAt: new Date(),
         });
-
-        setNotification({
-          open: true,
-          message: "Employer account created successfully!",
-          severity: "success",
-        });
-
-        setTimeout(() => navigate("/employer-setup"), 1000);
       } else {
-        // Store employee data
         await addDoc(collection(db, "employees"), {
           uid: user.uid,
           email: user.email,
           createdAt: new Date(),
         });
-
-        setNotification({
-          open: true,
-          message: "Account created successfully!",
-          severity: "success",
-        });
-
-        setTimeout(() => navigate("/profile-setup"), 1000);
       }
+
+      setNotification({
+        open: true,
+        message: "Verification email sent! Please check your inbox and verify your email before logging in.",
+        severity: "success",
+      });
+
+      // Do not redirect until user verifies
     } catch (err) {
       setError(err.message);
       setNotification({

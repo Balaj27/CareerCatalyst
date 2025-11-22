@@ -35,14 +35,20 @@ const formFields = {
   grade: "",
   gradeType: "CGPA",
   startDate: "",
-  endDate: "",
-  description: "",
+  endDate: ""
 };
 
 function Education({ resumeInfo }) {
   const [educationList, setEducationList] = useState(
     resumeInfo?.education && resumeInfo.education.length > 0 ? resumeInfo.education : [formFields]
   );
+
+  // Auto-fill education fields when resumeInfo.education changes
+  useEffect(() => {
+    if (resumeInfo?.education && resumeInfo.education.length > 0) {
+      setEducationList(resumeInfo.education);
+    }
+  }, [resumeInfo?.education]);
   const [loading, setLoading] = useState(false);
   const { resumeId, resume_id } = useParams();
   const resolvedResumeId = resumeId || resume_id;
@@ -335,32 +341,7 @@ function Education({ resumeInfo }) {
                 />
               </Stack>
             </Grid>
-            <Grid item xs={12}>
-              <TextField
-                fullWidth
-                label="Description"
-                name="description"
-                multiline
-                rows={3}
-                value={item.description}
-                onChange={(e) => handleChange(e, index)}
-                variant="filled"
-                size="small"
-                sx={{
-                  "& .MuiFilledInput-root": {
-                    background: midGreen,
-                    color: white,
-                    borderRadius: "8px",
-                  },
-                  "& .MuiInputLabel-root": {
-                    color: "#d0e7dd",
-                  },
-                }}
-                InputLabelProps={{
-                  style: { color: "#d0e7dd" },
-                }}
-              />
-            </Grid>
+            {/* Description field removed from education section */}
           </Grid>
         </Box>
       ))}
