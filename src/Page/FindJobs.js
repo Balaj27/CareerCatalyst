@@ -598,15 +598,18 @@ const CancelButton = styled(Button)({
 const FindJobs = () => {
             // Add missing handler functions for location dialog and selection
             const handleLocationClick = () => {
+              setLocationSearch("");
               setIsLocationDialogOpen(true);
             };
 
             const handleLocationDialogClose = () => {
+              setLocationSearch("");
               setIsLocationDialogOpen(false);
             };
 
             const handleLocationSelect = (selectedLocation) => {
               setLocation(selectedLocation);
+              setLocationSearch("");
               setIsLocationDialogOpen(false);
             };
 
@@ -620,15 +623,21 @@ const FindJobs = () => {
                     const { latitude, longitude } = position.coords;
                     // Dummy: just set a string for now
                     setLocation(`Lat: ${latitude}, Lon: ${longitude}`);
+                    setLocationSearch("");
+                    setIsLocationDialogOpen(false);
                     setIsGettingLocation(false);
                   },
                   (error) => {
                     setLocation("Location access denied");
+                    setLocationSearch("");
+                    setIsLocationDialogOpen(false);
                     setIsGettingLocation(false);
                   }
                 );
               } else {
                 setLocation("Geolocation not supported");
+                setLocationSearch("");
+                setIsLocationDialogOpen(false);
                 setIsGettingLocation(false);
               }
             };
@@ -645,6 +654,7 @@ const FindJobs = () => {
         const [isLocationDialogOpen, setIsLocationDialogOpen] = useState(false);
         const [isGettingLocation, setIsGettingLocation] = useState(false);
         const [nearbyLocations, setNearbyLocations] = useState([]);
+        const [locationSearch, setLocationSearch] = useState("");
         const popularLocations = [
           "Islamabad, Pakistan",
           "Lahore, Pakistan",
@@ -956,14 +966,57 @@ const FindJobs = () => {
     }
   };
 
-  // Remove all filter, sort, and location logic. Show all jobs by default.
+  // Filter jobs based on search criteria
   useEffect(() => {
     let jobs = allJobs.filter((job) => job.status !== 'Paused');
+    
+    // Filter by job title/keyword search
+    if (jobTitle.trim()) {
+      jobs = jobs.filter((job) => 
+        (job.title && job.title.toLowerCase().includes(jobTitle.toLowerCase())) ||
+        (job.description && job.description.toLowerCase().includes(jobTitle.toLowerCase())) ||
+        (job.company && job.company.toLowerCase().includes(jobTitle.toLowerCase()))
+      );
+    }
+    
+    // Filter by location
+    if (location.trim()) {
+      jobs = jobs.filter((job) => 
+        job.location && job.location.toLowerCase().includes(location.toLowerCase())
+      );
+    }
+    
+    // Filter by job type
+    if (selectedJobTypes.length > 0) {
+      jobs = jobs.filter((job) => 
+        selectedJobTypes.includes(job.jobType) || selectedJobTypes.includes(job.type)
+      );
+    }
+    
+    // Filter by category
+    if (selectedCategories.length > 0) {
+      jobs = jobs.filter((job) => 
+        selectedCategories.includes(job.category)
+      );
+    }
+    
+    // Filter by salary range
+    if (salaryRange[0] > 0 || salaryRange[1] < 10) {
+      jobs = jobs.filter((job) => {
+        if (!job.salary) return false;
+        const salaryStr = job.salary.toString();
+        const salaryAmount = parseInt(salaryStr.split('/')[0].replace(/[^0-9]/g, ''));
+        return salaryAmount >= salaryRange[0] * 1000 && salaryAmount <= salaryRange[1] * 1000;
+      });
+    }
+    
+    // Filter by saved jobs if needed
     if (showSavedOnly) {
       jobs = jobs.filter((job) => savedJobIds.includes(job.id));
     }
+    
     setFilteredJobs(jobs);
-  }, [allJobs, showSavedOnly, savedJobIds]);
+  }, [allJobs, showSavedOnly, savedJobIds, jobTitle, location, selectedJobTypes, selectedCategories, salaryRange]);
 
   // Handle job type checkbox change
   const handleJobTypeChange = (type) => {
@@ -1121,15 +1174,14 @@ const FindJobs = () => {
               placeholder="Location"
               variant="outlined"
               value={location}
-              onClick={handleLocationClick}
+              onChange={(e) => setLocation(e.target.value)}
+              onFocus={handleLocationClick}
               InputProps={{
                 startAdornment: (
                   <InputAdornment position="start">
                     <LocationOnIcon sx={{ color: "#757575" }} />
                   </InputAdornment>
                 ),
-                readOnly: true,
-                style: { cursor: "pointer" },
                 sx: {
                   "& input::placeholder": {
                     color: "#9e9e9e",
@@ -1156,10 +1208,49 @@ const FindJobs = () => {
         </Container>
 
         {/* Location Dialog */}
-        <LocationDialog open={isLocationDialogOpen} onClose={handleLocationDialogClose} maxWidth="xs" fullWidth>
+        <LocationDialog 
+          open={isLocationDialogOpen} 
+          onClose={handleLocationDialogClose}
+          maxWidth="xs" 
+          fullWidth
+          disableEscapeKeyDown={false}
+          onBackdropClick={handleLocationDialogClose}
+        >
           <LocationDialogTitle>Choose Location</LocationDialogTitle>
           <DialogContent sx={{ p: 0, pt: 2, backgroundColor: "#ffffff" }}>
             <Box sx={{ p: "0 24px" }}>
+              {/* Search/Type Location Input */}
+              <TextField
+                placeholder="Type or search location"
+                value={locationSearch}
+                onChange={(e) => setLocationSearch(e.target.value)}
+                fullWidth
+                variant="outlined"
+                size="small"
+                sx={{
+                  mb: 2,
+                  "& .MuiOutlinedInput-root": {
+                    "& fieldset": {
+                      borderColor: "#e0e0e0",
+                    },
+                    "&:hover fieldset": {
+                      borderColor: "#00796b",
+                    },
+                    "&.Mui-focused fieldset": {
+                      borderColor: "#00796b",
+                    },
+                  },
+                }}
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <LocationOnIcon sx={{ color: "#00796b" }} />
+                    </InputAdornment>
+                  ),
+                }}
+                autoFocus
+              />
+
               <CurrentLocationButton
                 startIcon={isGettingLocation ? <CircularProgress size={20} color="inherit" /> : <MyLocationIcon />}
                 onClick={getCurrentLocation}
@@ -1170,27 +1261,53 @@ const FindJobs = () => {
               </CurrentLocationButton>
             </Box>
 
-            <Typography variant="subtitle2" sx={{ px: 3, mb: 1, fontWeight: 600, color: "#333" }}>
-              Popular Locations
+            <Typography variant="subtitle2" sx={{ px: 3, mb: 1, fontWeight: 600, color: "#333", mt: 2 }}>
+              {locationSearch ? "Filtered Locations" : "Popular Locations"}
             </Typography>
             <List disablePadding>
-              {popularLocations.map((loc) => (
+              {popularLocations
+                .filter((loc) =>
+                  locationSearch === "" ||
+                  loc.toLowerCase().includes(locationSearch.toLowerCase())
+                )
+                .map((loc) => (
+                  <LocationListItem
+                    button
+                    key={loc}
+                    onClick={() => handleLocationSelect(loc)}
+                    className={location === loc ? "selected" : ""}
+                    sx={{
+                      backgroundColor: location === loc ? "#f5f5f5" : "transparent",
+                    }}
+                  >
+                    <ListItemText primary={loc} sx={{ "& .MuiTypography-root": { color: "#333" } }} />
+                  </LocationListItem>
+                ))}
+              
+              {/* If user typed something not in popular locations, show custom option */}
+              {locationSearch && !popularLocations.some(loc => loc.toLowerCase() === locationSearch.toLowerCase()) && (
                 <LocationListItem
                   button
-                  key={loc}
-                  onClick={() => handleLocationSelect(loc)}
-                  className={location === loc ? "selected" : ""}
+                  onClick={() => {
+                    setLocation(locationSearch);
+                    setLocationSearch("");
+                    setIsLocationDialogOpen(false);
+                  }}
                   sx={{
-                    backgroundColor: location === loc ? "#f5f5f5" : "transparent",
+                    backgroundColor: "#f0f7f6",
+                    borderTop: "1px solid #e0e0e0",
                   }}
                 >
-                  <ListItemText primary={loc} sx={{ "& .MuiTypography-root": { color: "#333" } }} />
+                  <ListItemText 
+                    primary={`Use "${locationSearch}"`} 
+                    sx={{ "& .MuiTypography-root": { color: "#00796b", fontWeight: 600 } }} 
+                  />
                 </LocationListItem>
-              ))}
+              )}
             </List>
           </DialogContent>
           <DialogActions
-            sx={{ justifyContent: "flex-end", p: 2, borderTop: "1px solid #f0f0f0", backgroundColor: "#ffffff" }}
+            sx={{ justifyContent: "space-between", p: 2, borderTop: "1px solid #f0f0f0", backgroundColor: "#ffffff" }}
           >
             <CancelButton onClick={handleLocationDialogClose}>Cancel</CancelButton>
           </DialogActions>
@@ -1284,10 +1401,50 @@ const FindJobs = () => {
                 }}
               >
                 <Typography variant="h6" fontWeight="bold">
-                  Job Type
+                  Filters
                 </Typography>
                 <ClearAllButton onClick={handleClearAll}>clear all</ClearAllButton>
               </Box>
+
+              {/* Location Filter */}
+              <FilterTitle sx={{ mt: 0, mb: 1 }}>Location</FilterTitle>
+              <TextField
+                placeholder="Enter location"
+                value={location}
+                onChange={(e) => setLocation(e.target.value)}
+                fullWidth
+                size="small"
+                variant="outlined"
+                sx={{
+                  mb: 2,
+                  "& .MuiOutlinedInput-root": {
+                    color: "white",
+                    "& fieldset": {
+                      borderColor: "rgba(255, 255, 255, 0.3)",
+                    },
+                    "&:hover fieldset": {
+                      borderColor: "rgba(255, 255, 255, 0.5)",
+                    },
+                    "&.Mui-focused fieldset": {
+                      borderColor: "#00A389",
+                    },
+                  },
+                  "& .MuiOutlinedInput-input::placeholder": {
+                    color: "rgba(255, 255, 255, 0.7)",
+                    opacity: 1,
+                  },
+                }}
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <LocationOnIcon sx={{ color: "#00A389", mr: 1 }} />
+                    </InputAdornment>
+                  ),
+                }}
+              />
+
+              {/* Job Type Filter */}
+              <FilterTitle sx={{ mt: 2 }}>Job Type</FilterTitle>
 
               {/* Job Type Filter with white tick */}
               <FormGroup>
