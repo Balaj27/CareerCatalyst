@@ -1,7 +1,7 @@
 import { Gem } from "lucide-react";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
-const apiKey = "AIzaSyBb-36n_Y9X7t7aApbfQLEZ4QJvI9vqUq0";  // replace with your key
+const apiKey = "AIzaSyDkqBwAkKifGFxoF3SRjjoKHflXjZC_jHs";  // replace with your key
 const genAI = new GoogleGenerativeAI(apiKey);
 
 // Use a newer model, e.g. gemini-2.5-flash-lite
@@ -10,11 +10,10 @@ const model = genAI.getGenerativeModel({
 });
 
 const generationConfig = {
-  temperature: 1,
+  temperature: 0.7,
   topP: 0.95,
-  topK: 64,
-  maxOutputTokens: 8192,
-  responseMimeType: "application/json",
+  topK: 40,
+  maxOutputTokens: 1000,
 };
 
 

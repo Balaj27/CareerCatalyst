@@ -6,6 +6,8 @@ import { useAuth } from "../lib/auth-context"
 import { submitApplication, getApplicationsForUser } from "../lib/firestore-application"
 import { saveJob, unsaveJob, getSavedJobsForUser } from "../lib/firestore-saved-jobs";
 import { sendCandidateEmail } from "../Services/sendCandidateEmail";
+import { getUserProfileData } from "../Services/userProfileAPI";
+import { generateCoverLetterAI } from "../Services/generateCoverLetterAI";
 import { getAllResumeData } from "../Services/resumeAPI"
 import {
   Box,
@@ -657,6 +659,7 @@ const FindJobs = () => {
     const [isApplyDialogOpen, setIsApplyDialogOpen] = useState(false);
     const [applyJob, setApplyJob] = useState(null);
     const [coverLetter, setCoverLetter] = useState("");
+    const [generatingCoverLetter, setGeneratingCoverLetter] = useState(false);
     const [applying, setApplying] = useState(false);
     const [applyError, setApplyError] = useState("");
     const [email, setEmail] = useState("");
@@ -708,10 +711,11 @@ const FindJobs = () => {
       setEmail("");
       setPhone("");
       setSelectedResumeId("");
-      // Check if user already applied to this job
+      setGeneratingCoverLetter(false);
+      
+      // Check if user already applied to this job and fetch profile data
       if (currentUser) {
         try {
-          const { getUserProfileData } = await import("../Services/userProfileAPI");
           const profile = await getUserProfileData();
           setEmail(profile.email || "");
           setPhone(profile.phone || "");
@@ -724,6 +728,73 @@ const FindJobs = () => {
         setAlreadyApplied(hasApplied);
       } else {
         setAlreadyApplied(false);
+      }
+    };
+
+    // AI Cover Letter Generation Handler
+    const handleGenerateCoverLetter = async () => {
+      if (!applyJob) return;
+      console.log("[FindJobs] Starting cover letter generation for job:", applyJob);
+      setGeneratingCoverLetter(true);
+      setApplyError("");
+      try {
+        // Fetch user profile data for complete cover letter
+        let userName = currentUser?.displayName || "";
+        let userEmail = email || "";
+        let userPhone = phone || "";
+        
+        if (!userEmail || !userPhone) {
+          try {
+            const profile = await getUserProfileData();
+            userName = profile?.displayName || profile?.name || userName;
+            userEmail = userEmail || profile?.email || "";
+            userPhone = userPhone || profile?.phone || "";
+            console.log("[FindJobs] Fetched user profile:", { userName, userEmail, userPhone });
+          } catch (err) {
+            console.log("[FindJobs] Could not fetch profile, using available data");
+          }
+        }
+        
+        // Fetch user skills/experience from resume if available
+        let userSkills = "";
+        let userExperience = "";
+        if (selectedResumeId && resumes.length > 0) {
+          const selectedResume = resumes.find(r => r.id === selectedResumeId);
+          userSkills = selectedResume?.skills?.join(", ") || "";
+          userExperience = selectedResume?.summary || selectedResume?.experience || "";
+          console.log("[FindJobs] Selected resume skills:", userSkills);
+          console.log("[FindJobs] Selected resume experience:", userExperience);
+        }
+        
+        console.log("[FindJobs] Calling generateCoverLetterAI with params:", {
+          jobTitle: applyJob.title,
+          company: applyJob.company,
+          requirements: applyJob.requirements || applyJob.description || "",
+          skills: userSkills,
+          experience: userExperience,
+          name: userName,
+          email: userEmail,
+          phone: userPhone,
+        });
+        
+        const cover = await generateCoverLetterAI({
+          jobTitle: applyJob.title,
+          company: applyJob.company,
+          requirements: applyJob.requirements || applyJob.description || "",
+          skills: userSkills,
+          experience: userExperience,
+          name: userName,
+          email: userEmail,
+          phone: userPhone,
+        });
+        console.log("[FindJobs] Generated cover letter:", cover);
+        setCoverLetter(cover);
+        console.log("[FindJobs] Cover letter state updated successfully");
+      } catch (err) {
+        console.error("[FindJobs] Error generating cover letter:", err);
+        setApplyError(err?.message || "Failed to generate cover letter. Try again.");
+      } finally {
+        setGeneratingCoverLetter(false);
       }
     };
 
@@ -1546,16 +1617,26 @@ const FindJobs = () => {
               required
               type="tel"
             />
-            <TextField
-              label="Cover Letter"
-              value={coverLetter}
-              onChange={e => setCoverLetter(e.target.value)}
-              fullWidth
-              multiline
-              minRows={3}
-              margin="normal"
-              required
-            />
+            <Box display="flex" alignItems="center" gap={2}>
+              <TextField
+                label="Cover Letter"
+                value={coverLetter}
+                onChange={e => setCoverLetter(e.target.value)}
+                fullWidth
+                multiline
+                minRows={3}
+                margin="normal"
+                required
+              />
+              <Button
+                variant="outlined"
+                onClick={handleGenerateCoverLetter}
+                disabled={generatingCoverLetter || !applyJob}
+                sx={{ minWidth: 160 }}
+              >
+                {generatingCoverLetter ? "Generating..." : "AI Generate"}
+              </Button>
+            </Box>
             {/* Resume selection dropdown */}
             <Box mt={2}>
               <Typography variant="subtitle2" gutterBottom>Select Resume</Typography>
