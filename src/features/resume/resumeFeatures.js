@@ -2,7 +2,9 @@ import { createSlice } from "@reduxjs/toolkit";
 
 const initialState = {
   resumeId: null,
-  resumeData: {}
+  resumeData: {
+    template: "modern" // Default template
+  }
 };
 
 export const resumeSlice = createSlice({

@@ -20,6 +20,7 @@ import Education from "./form-components/Education";
 import Skills from "./form-components/Skills";
 import Project from "./form-components/Project";
 import ThemeColor from "./ThemeColor";
+import TemplateSelector from "./TemplateSelector";
 import { setResumeId, setResumeData } from "../../../../features/resume/resumeFeatures";
 import { getResumeData, createNewResume } from "../../../../Services/resumeAPI";
 import { getUserProfileData, convertProfileToResumeData } from "../../../../Services/userProfileAPI";
@@ -222,6 +223,11 @@ function ResumeForm() {
           </Button>
         </Stack>
       </Stack>
+
+      {/* Template Selector */}
+      <Box sx={{ mb: 3 }}>
+        <TemplateSelector />
+      </Box>
 
       {/* Accordions/Sections */}
       <Box>
