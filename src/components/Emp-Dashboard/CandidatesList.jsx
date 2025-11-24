@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { getApplicationsForEmployer } from "../../lib/firestore-application"
+import { sendJobOffer } from "../../lib/firestore-offers"
 import MessageEmailDialog from "./MessageEmailDialog"
 import { useAuth } from "../../lib/auth-context"
 import { getResumeData } from "../../Services/resumeAPI"
@@ -32,7 +33,7 @@ import {
 } from "@mui/material"
 import { Search, Email, Phone, LocationOn, Work, School, Star } from "@mui/icons-material"
 
-const CandidateCard = ({ candidate, onViewProfile, onSendMessage, onShortlist, isShortlisted }) => (
+const CandidateCard = ({ candidate, onViewProfile, onSendMessage, onShortlist, isShortlisted, onGiveOffer }) => (
   <Card sx={{ mb: 2, "&:hover": { boxShadow: 3 } }}>
     <CardContent>
       <Box sx={{ display: "flex", alignItems: "flex-start", gap: 2 }}>
@@ -92,7 +93,7 @@ const CandidateCard = ({ candidate, onViewProfile, onSendMessage, onShortlist, i
             {candidate.skills.length > 4 && <Chip label={`+${candidate.skills.length - 4} more`} size="small" />}
           </Box>
 
-          <Box sx={{ display: "flex", gap: 1 }}>
+          <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
             <Button variant="outlined" size="small" onClick={() => onViewProfile(candidate)}>
               View Profile
             </Button>
@@ -114,6 +115,14 @@ const CandidateCard = ({ candidate, onViewProfile, onSendMessage, onShortlist, i
               sx={{ minWidth: 110 }}
             >
               {isShortlisted ? "Shortlisted" : "Shortlist"}
+            </Button>
+            <Button
+              variant="contained"
+              size="small"
+              onClick={() => onGiveOffer(candidate)}
+              sx={{ bgcolor: "#00A389", "&:hover": { bgcolor: "#008571" } }}
+            >
+              Give Offer
             </Button>
           </Box>
         </Box>
@@ -364,6 +373,142 @@ const CandidateProfile = ({ candidate, open, onClose }) => {
   );
 };
 
+const OfferDialog = ({ open, candidate, onClose, onSendOffer, job }) => {
+  const [salaryMin, setSalaryMin] = useState("")
+  const [salaryMax, setSalaryMax] = useState("")
+  const [currency, setCurrency] = useState("USD")
+  const [jobType, setJobType] = useState("Full-time")
+  const [startDate, setStartDate] = useState("")
+  const [description, setDescription] = useState("")
+  const [loading, setLoading] = useState(false)
+
+  const handleSendOffer = async () => {
+    if (!salaryMin || !salaryMax || !startDate) {
+      alert("Please fill in all required fields")
+      return
+    }
+
+    setLoading(true)
+    try {
+      await onSendOffer({
+        salaryMin: parseInt(salaryMin),
+        salaryMax: parseInt(salaryMax),
+        currency,
+        jobType,
+        startDate,
+        description,
+      })
+      // Reset form
+      setSalaryMin("")
+      setSalaryMax("")
+      setCurrency("USD")
+      setJobType("Full-time")
+      setStartDate("")
+      setDescription("")
+      onClose()
+    } catch (err) {
+      alert("Failed to send offer: " + err.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+      <DialogTitle>Send Job Offer</DialogTitle>
+      <DialogContent sx={{ pt: 2 }}>
+        <Grid container spacing={2}>
+          <Grid item xs={12}>
+            <Typography variant="subtitle2" color="text.secondary">
+              Candidate: <strong>{candidate?.name}</strong> ({candidate?.email})
+            </Typography>
+          </Grid>
+          <Grid item xs={12}>
+            <Typography variant="subtitle2" color="text.secondary">
+              Position: <strong>{job?.title}</strong> at <strong>{job?.company}</strong>
+            </Typography>
+          </Grid>
+          <Grid item xs={12} sm={6}>
+            <TextField
+              fullWidth
+              label="Minimum Salary"
+              type="number"
+              value={salaryMin}
+              onChange={(e) => setSalaryMin(e.target.value)}
+              required
+            />
+          </Grid>
+          <Grid item xs={12} sm={6}>
+            <TextField
+              fullWidth
+              label="Maximum Salary"
+              type="number"
+              value={salaryMax}
+              onChange={(e) => setSalaryMax(e.target.value)}
+              required
+            />
+          </Grid>
+          <Grid item xs={12} sm={6}>
+            <FormControl fullWidth>
+              <InputLabel>Currency</InputLabel>
+              <Select value={currency} onChange={(e) => setCurrency(e.target.value)} label="Currency">
+                <MenuItem value="USD">USD ($)</MenuItem>
+                <MenuItem value="EUR">EUR (€)</MenuItem>
+                <MenuItem value="GBP">GBP (£)</MenuItem>
+                <MenuItem value="PKR">PKR (₨)</MenuItem>
+                <MenuItem value="INR">INR (₹)</MenuItem>
+              </Select>
+            </FormControl>
+          </Grid>
+          <Grid item xs={12} sm={6}>
+            <FormControl fullWidth>
+              <InputLabel>Job Type</InputLabel>
+              <Select value={jobType} onChange={(e) => setJobType(e.target.value)} label="Job Type">
+                <MenuItem value="Full-time">Full-time</MenuItem>
+                <MenuItem value="Part-time">Part-time</MenuItem>
+                <MenuItem value="Contract">Contract</MenuItem>
+                <MenuItem value="Freelance">Freelance</MenuItem>
+              </Select>
+            </FormControl>
+          </Grid>
+          <Grid item xs={12}>
+            <TextField
+              fullWidth
+              label="Start Date"
+              type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              InputLabelProps={{ shrink: true }}
+              required
+            />
+          </Grid>
+          <Grid item xs={12}>
+            <TextField
+              fullWidth
+              label="Description (Optional)"
+              multiline
+              rows={3}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Additional details about the offer..."
+            />
+          </Grid>
+        </Grid>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose}>Cancel</Button>
+        <Button
+          variant="contained"
+          onClick={handleSendOffer}
+          disabled={loading}
+          sx={{ bgcolor: "#00A389", "&:hover": { bgcolor: "#008571" } }}
+        >
+          {loading ? "Sending..." : "Send Offer"}
+        </Button>
+      </DialogActions>
+    </Dialog>
+  )
+};
 
 const CandidatesList = () => {
   const { currentUser } = useAuth();
@@ -380,6 +525,11 @@ const CandidatesList = () => {
   const [messageJob, setMessageJob] = useState(null)
   const [shortlistedIds, setShortlistedIds] = useState([])
   const [shortlistLoading, setShortlistLoading] = useState(false)
+  
+  // Offer state
+  const [offerDialogOpen, setOfferDialogOpen] = useState(false)
+  const [offerCandidate, setOfferCandidate] = useState(null)
+  const [offerSending, setOfferSending] = useState(false)
   // Shortlist handler
   const handleShortlist = async (candidate) => {
     setShortlistLoading(true);
@@ -400,6 +550,84 @@ const CandidatesList = () => {
       setShortlistLoading(false);
     }
   };
+
+  // Give Offer handler
+  const handleGiveOffer = (candidate) => {
+    setOfferCandidate(candidate)
+    setOfferDialogOpen(true)
+  }
+
+  const handleSendOffer = async (offerDetails) => {
+    setOfferSending(true)
+    try {
+      const employerId = currentUser?.uid;
+      if (!employerId) {
+        throw new Error("Employer ID not found")
+      }
+
+      await sendJobOffer({
+        candidateId: offerCandidate.application.userId,
+        jobId: offerCandidate.application.jobId,
+        employerId: employerId,
+        employerEmail: currentUser?.email,
+        candidateEmail: offerCandidate.email,
+        jobTitle: offerCandidate.job?.title || "Position",
+        company: offerCandidate.job?.company || "Company",
+        salaryMin: offerDetails.salaryMin,
+        salaryMax: offerDetails.salaryMax,
+        currency: offerDetails.currency,
+        jobType: offerDetails.jobType,
+        startDate: offerDetails.startDate,
+        description: offerDetails.description,
+      })
+
+      // Send notification email to candidate
+      await sendCandidateEmail({
+        to: offerCandidate.email,
+        subject: `Job Offer: ${offerCandidate.job?.title || "Position"} at ${offerCandidate.job?.company || "Company"}`,
+        body: `Congratulations!<br><br>We are pleased to offer you the position of <b>${offerCandidate.job?.title || "Position"}</b> at <b>${offerCandidate.job?.company || "Company"}</b>.<br><br>
+        <b>Offer Details:</b><br>
+        Salary: ${offerDetails.currency} ${offerDetails.salaryMin.toLocaleString()} - ${offerDetails.salaryMax.toLocaleString()}<br>
+        Job Type: ${offerDetails.jobType}<br>
+        Start Date: ${offerDetails.startDate}<br><br>
+        Please log in to your dashboard to accept or reject this offer.<br><br>
+        Best regards,<br>
+        ${offerCandidate.job?.company || "Company"} Team`,
+        company: offerCandidate.job?.company || "Company",
+        jobTitle: offerCandidate.job?.title || "Position",
+        candidateName: offerCandidate.name || offerCandidate.email,
+      });
+
+      // Send confirmation email to employer
+      await sendCandidateEmail({
+        to: currentUser?.email,
+        subject: `Offer Sent Confirmation: ${offerCandidate.job?.title || "Position"} to ${offerCandidate.name}`,
+        body: `<b>Offer Sent Successfully</b><br><br>
+        You have sent a job offer to <b>${offerCandidate.name}</b> for the position of <b>${offerCandidate.job?.title || "Position"}</b>.<br><br>
+        <b>Candidate Details:</b><br>
+        Name: ${offerCandidate.name}<br>
+        Email: ${offerCandidate.email}<br>
+        Phone: ${offerCandidate.phone}<br><br>
+        <b>Offer Details:</b><br>
+        Salary: ${offerDetails.currency} ${offerDetails.salaryMin.toLocaleString()} - ${offerDetails.salaryMax.toLocaleString()}<br>
+        Job Type: ${offerDetails.jobType}<br>
+        Start Date: ${offerDetails.startDate}<br><br>
+        The candidate will receive an email about this offer. You can track the candidate's response in your employer dashboard.<br><br>
+        Best regards,<br>
+        CareerCatalyst Team`,
+        company: offerCandidate.job?.company || "Company",
+        jobTitle: offerCandidate.job?.title || "Position",
+        candidateName: offerCandidate.name || offerCandidate.email,
+      });
+
+      alert("Offer sent successfully! Both you and the candidate will receive email confirmations.")
+      setOfferDialogOpen(false)
+    } catch (err) {
+      alert("Failed to send offer: " + err.message)
+    } finally {
+      setOfferSending(false)
+    }
+  }
 
   useEffect(() => {
     const fetchApplications = async () => {
@@ -555,6 +783,7 @@ const CandidatesList = () => {
               onViewProfile={handleViewProfile}
               onSendMessage={handleSendMessage}
               onShortlist={handleShortlist}
+              onGiveOffer={handleGiveOffer}
               isShortlisted={shortlistedIds.includes(candidate.id)}
             />
           ))}
@@ -567,6 +796,13 @@ const CandidatesList = () => {
         onClose={() => setMessageDialogOpen(false)}
         candidate={messageCandidate}
         job={messageJob}
+      />
+      <OfferDialog
+        open={offerDialogOpen}
+        candidate={offerCandidate}
+        job={offerCandidate?.job}
+        onClose={() => setOfferDialogOpen(false)}
+        onSendOffer={handleSendOffer}
       />
     </Box>
   )

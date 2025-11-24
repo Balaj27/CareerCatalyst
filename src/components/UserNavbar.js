@@ -70,6 +70,7 @@ export default function UserNavbar() {
             open={Boolean(anchorEl)}
             onClose={handleClose}
           >
+            <MenuItem onClick={handleClose} component={Link} to="/dashboard">Dashboard</MenuItem>
             <MenuItem onClick={handleClose} component={Link} to="/edit-profile">Profile Settings</MenuItem>
             <MenuItem onClick={handleClose} component={Link} to="/login">Logout</MenuItem>
           </Menu>

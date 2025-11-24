@@ -598,18 +598,15 @@ const CancelButton = styled(Button)({
 const FindJobs = () => {
             // Add missing handler functions for location dialog and selection
             const handleLocationClick = () => {
-              setLocationSearch("");
               setIsLocationDialogOpen(true);
             };
 
             const handleLocationDialogClose = () => {
-              setLocationSearch("");
               setIsLocationDialogOpen(false);
             };
 
             const handleLocationSelect = (selectedLocation) => {
               setLocation(selectedLocation);
-              setLocationSearch("");
               setIsLocationDialogOpen(false);
             };
 
@@ -623,21 +620,15 @@ const FindJobs = () => {
                     const { latitude, longitude } = position.coords;
                     // Dummy: just set a string for now
                     setLocation(`Lat: ${latitude}, Lon: ${longitude}`);
-                    setLocationSearch("");
-                    setIsLocationDialogOpen(false);
                     setIsGettingLocation(false);
                   },
                   (error) => {
                     setLocation("Location access denied");
-                    setLocationSearch("");
-                    setIsLocationDialogOpen(false);
                     setIsGettingLocation(false);
                   }
                 );
               } else {
                 setLocation("Geolocation not supported");
-                setLocationSearch("");
-                setIsLocationDialogOpen(false);
                 setIsGettingLocation(false);
               }
             };
@@ -1208,14 +1199,7 @@ const FindJobs = () => {
         </Container>
 
         {/* Location Dialog */}
-        <LocationDialog 
-          open={isLocationDialogOpen} 
-          onClose={handleLocationDialogClose}
-          maxWidth="xs" 
-          fullWidth
-          disableEscapeKeyDown={false}
-          onBackdropClick={handleLocationDialogClose}
-        >
+        <LocationDialog open={isLocationDialogOpen} onClose={handleLocationDialogClose} maxWidth="xs" fullWidth>
           <LocationDialogTitle>Choose Location</LocationDialogTitle>
           <DialogContent sx={{ p: 0, pt: 2, backgroundColor: "#ffffff" }}>
             <Box sx={{ p: "0 24px" }}>
@@ -1309,7 +1293,10 @@ const FindJobs = () => {
           <DialogActions
             sx={{ justifyContent: "space-between", p: 2, borderTop: "1px solid #f0f0f0", backgroundColor: "#ffffff" }}
           >
-            <CancelButton onClick={handleLocationDialogClose}>Cancel</CancelButton>
+            <CancelButton onClick={() => {
+              setLocationSearch("");
+              handleLocationDialogClose();
+            }}>Cancel</CancelButton>
           </DialogActions>
         </LocationDialog>
       </HeroContainer>

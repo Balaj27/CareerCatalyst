@@ -8,6 +8,7 @@ import {
   doc,
   getDoc,
   Timestamp,
+  updateDoc,
 } from "firebase/firestore";
 
 // Add a new job application
@@ -61,4 +62,24 @@ export async function getApplicationById(applicationId) {
   const docRef = doc(db, "applications", applicationId);
   const snap = await getDoc(docRef);
   return snap.exists() ? { id: snap.id, ...snap.data() } : null;
+}
+
+// Update application status
+export async function updateApplicationStatus(applicationId, status, offerId = null) {
+  if (!["pending", "accepted", "rejected"].includes(status)) {
+    throw new Error("Invalid status. Must be 'pending', 'accepted', or 'rejected'");
+  }
+
+  const appRef = doc(db, "applications", applicationId);
+  const updateData = {
+    status,
+    updatedAt: Timestamp.now(),
+  };
+
+  if (offerId) {
+    updateData.offerId = offerId;
+    updateData.acceptedAt = Timestamp.now();
+  }
+
+  await updateDoc(appRef, updateData);
 }
